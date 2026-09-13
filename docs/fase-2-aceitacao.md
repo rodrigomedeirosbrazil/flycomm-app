@@ -163,7 +163,7 @@ seção 8 não é opcional.
 
 ---
 
-## 7.1 Escuta em segundo plano no iOS — conexão verificada, áudio pendente
+## 7.1 Escuta em segundo plano no iOS — **não se sustenta com este desenho**
 
 A fatia antecipada da Fase 4 (§7.1 da spec). Duas tentativas, e a primeira falhou de
 um jeito instrutivo.
@@ -223,3 +223,39 @@ simulador é generoso onde o iOS é estrito:
 
 A lição operacional: **o simulador não é evidência para nada que envolva rede ou
 ciclo de vida.** Serve para UI e lógica; o resto exige o aparelho.
+
+### Desfecho: o andaime não sustenta
+
+Depois da tentativa 2 funcionar uma vez, ela não se repetiu. O teste decisivo eliminou
+a última variável: **dados móveis desligados**, para o aparelho só poder usar o Wi-Fi
+— o servidor está num IP privado e a Assistência Wi-Fi do iOS trocando para o 4G o
+tornaria inalcançável por um motivo alheio ao segundo plano.
+
+Com Wi-Fi garantido, a fala publicada não foi buscada. E ao reabrir, o log mostrou
+`GET /config` + `POST /auth/device` + `GET /rooms`: **partida a frio**. O app tinha
+sido morto, não apenas desconectado.
+
+| Tentativa | Resultado |
+|---|---|
+| Sessão ativa, sem áudio saindo | suspenso em segundos |
+| Silêncio em laço | funcionou **uma vez** (3 entregas ao vivo, 41 s de intervalo), não se repetiu |
+| Silêncio em laço, Wi-Fi garantido | **morto em segundo plano** |
+
+**O intermitente é o pior desfecho possível.** Um rádio que às vezes ouve é mais
+perigoso que um que nunca ouve: o piloto guarda o celular confiando nele, e a falha só
+aparece quando alguém precisou e não foi ouvido.
+
+### O que isto decide
+
+**A premissa da Fase 3 estava errada, e agora está medida.** A eleição de ponte não
+pode assumir que o celular no bolso continua ouvindo. Era exatamente para descobrir
+isso que a fatia foi antecipada (§7.1 da spec), e o custo de descobrir agora foi uma
+tarde; no meio da Fase 3, com BLE e supressão de eco sendo depurados ao mesmo tempo,
+teria sido muito maior.
+
+**O caminho é o framework PushToTalk** (iOS 16+), que a spec do sistema já registrava
+como Fase 5 — agora com justificativa medida em vez de teórica. Ele exige entitlement
+`com.apple.developer.push-to-talk`, conta paga de desenvolvedor e APNs.
+
+**O silêncio em laço deveria sair.** Ele gasta bateria continuamente para entregar uma
+garantia que não existe, e deixá-lo no código convida alguém a confiar nele.
