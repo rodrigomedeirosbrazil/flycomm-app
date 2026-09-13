@@ -115,10 +115,18 @@ class _RoomScreenState extends State<RoomScreen> {
     final flight = _flight;
     if (flight == null) return;
 
-    if (flight.isInFlight) {
-      await flight.leave();
-    } else {
-      await flight.enter();
+    // Entrar em voo é a ação de que o piloto mais depende e a que ele menos
+    // consegue conferir: ele liga, guarda o celular, e só descobre horas
+    // depois. Falhar em silêncio aqui é o pior caso do app.
+    try {
+      if (flight.isInFlight) {
+        await flight.leave();
+      } else {
+        await flight.enter();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _lastProblem = 'Não deu para entrar em voo: $error');
     }
   }
 

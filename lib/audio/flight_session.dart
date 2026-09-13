@@ -142,10 +142,24 @@ class FlightSession {
       }
       await player.setFilePath(file.path);
       await player.setLoopMode(LoopMode.one);
-      await player.setVolume(0);
+      // Volume cheio de propósito: o arquivo é só zeros, então já é inaudível,
+      // e volume zero é ambíguo — não está claro se o iOS conta um player
+      // mudo como "produzindo áudio" para efeito de segundo plano. Silêncio
+      // por conteúdo não deixa margem; silêncio por volume deixa.
+      await player.setVolume(1);
     }
 
     await player.play();
+
+    // Sem isto, um keep-alive que não pegou vira suspensão silenciosa minutos
+    // depois, longe da causa: o piloto guarda o celular achando que está
+    // ouvindo e volta sem nada.
+    if (!player.playing) {
+      throw StateError(
+        'o silêncio de manutenção não começou a tocar; sem ele o iOS suspende '
+        'o app com a tela apagada',
+      );
+    }
   }
 
   /// Sai de voo e devolve a sessão ao sistema. A partir daqui o app volta a ser
