@@ -118,7 +118,20 @@ class RoomSession {
 
   /// O caminho único de entrada: o evento, a resposta do upload e o catch-up
   /// chegam aqui, porque são a mesma mensagem.
+  /// Envolve [_ingest] para que nada falhe em silêncio.
+  ///
+  /// Este método é assinado direto no stream de eventos e chamado em laço pelo
+  /// catch-up. Uma exceção escapando daqui vira erro assíncrono não tratado: a
+  /// mensagem some, e nem o piloto nem o log ficam sabendo.
   Future<void> ingest(RoomMessage message) async {
+    try {
+      await _ingest(message);
+    } catch (error) {
+      _playbackProblems.add('Não deu para receber uma fala: $error');
+    }
+  }
+
+  Future<void> _ingest(RoomMessage message) async {
     if (await history.exists(message.id)) return;
 
     // A idade é a DA FALA, não a da chegada (spec 2.1): com entrega atrasada

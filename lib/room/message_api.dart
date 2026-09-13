@@ -72,18 +72,48 @@ class MessageApi {
 
   /// O endpoint responde `application/octet-stream` com `Accept-Ranges: bytes`
   /// — retomável, para sobreviver a sinal ruim.
+  /// Quantas vezes insistir num erro de transporte antes de desistir.
+  ///
+  /// O app vive no bolso e o sistema derruba conexões ao suspendê-lo. O
+  /// `HttpClient` do Dart mantém um pool e reaproveita um socket que o iOS já
+  /// fechou, e a falha que sai disso é `ApiException(null): connection reused`
+  /// — sem `statusCode`, porque não houve resposta HTTP nenhuma. Do lado do
+  /// servidor a requisição aparece com 200: ele atendeu, o aparelho é que não
+  /// recebeu.
+  ///
+  /// Uma segunda tentativa pega uma conexão nova e passa. Sem isto, toda fala
+  /// que chega logo depois de o app voltar do segundo plano é perdida — e o
+  /// piloto vê "mensagem atrasada sem áudio", que não diz nada sobre a causa.
+  static const _downloadAttempts = 3;
+
   Future<Uint8List> download(String audioUrl) async {
-    try {
-      final response = await api.raw.get<List<int>>(
-        audioUrl,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      return Uint8List.fromList(response.data!);
-    } on DioException catch (e) {
-      throw ApiException(
-        statusCode: e.response?.statusCode,
-        message: e.message ?? 'falha ao baixar o áudio',
-      );
+    ApiException? lastFailure;
+
+    for (var attempt = 1; attempt <= _downloadAttempts; attempt++) {
+      try {
+        final response = await api.raw.get<List<int>>(
+          audioUrl,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        return Uint8List.fromList(response.data!);
+      } on DioException catch (e) {
+        final failure = ApiException(
+          statusCode: e.response?.statusCode,
+          message: e.message ?? 'falha ao baixar o áudio',
+        );
+
+        // Erro com resposta é do servidor — 404 de blob vencido, 403 de quem
+        // não é membro — e insistir só repete a recusa. Sem resposta é
+        // transporte, e aí a próxima tentativa tem chance.
+        if (failure.statusCode != null) throw failure;
+
+        lastFailure = failure;
+        if (attempt < _downloadAttempts) {
+          await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
+        }
+      }
     }
+
+    throw lastFailure!;
   }
 }
