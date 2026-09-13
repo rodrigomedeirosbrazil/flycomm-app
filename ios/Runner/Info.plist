@@ -68,6 +68,8 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>O flycomm usa o microfone para transmitir sua voz para a sala de pilotos.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>O flycomm fala com o servidor da sala de pilotos na sua rede local.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

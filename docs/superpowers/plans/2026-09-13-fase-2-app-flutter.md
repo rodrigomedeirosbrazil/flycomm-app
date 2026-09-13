@@ -394,6 +394,8 @@ Em `ios/Runner/Info.plist`, acrescente antes de `</dict>`:
 ```xml
 	<key>NSMicrophoneUsageDescription</key>
 	<string>O flycomm usa o microfone para transmitir sua voz para a sala de pilotos.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>O flycomm fala com o servidor da sala de pilotos na sua rede local.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -406,6 +408,14 @@ Em `ios/Runner/Info.plist`, acrescente antes de `</dict>`:
 > Mesma ressalva: ATS aberto é de bancada. Os dois booleanos juntos são a receita
 > documentada pela Apple — sistemas modernos ignoram `NSAllowsArbitraryLoads` e
 > honram `NSAllowsLocalNetworking`, e os antigos fazem o contrário.
+>
+> **`NSLocalNetworkUsageDescription` não é opcional e o simulador esconde isso.**
+> Desde o iOS 14, falar com um endereço da rede local exige a permissão de Rede
+> Local, e sem essa chave o sistema nem chega a perguntar: o app simplesmente não
+> alcança o servidor. O **simulador não impõe a regra**, então tudo passa lá e só o
+> aparelho falha — com a tela de "não deu para falar com o servidor" e nenhuma
+> requisição chegando no backend. Na primeira execução o iOS pergunta; é preciso
+> tocar em Permitir.
 
 - [ ] **Passo 6: verificar**
 
