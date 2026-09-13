@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/player.dart';
@@ -102,10 +103,11 @@ class _RoomScreenState extends State<RoomScreen> {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [_FrequencyInput()],
           decoration: const InputDecoration(
             suffixText: 'MHz',
             hintText: '145,550',
-            helperText: 'Em MHz, como 145,550. Faixas: 136–174 e 400–470.\n'
+            helperText: '145,550 ou 145550. Faixas: 136–174 e 400–470 MHz.\n'
                 'Vazio limpa. Quem sintoniza o rádio é você.',
             helperMaxLines: 2,
           ),
@@ -125,34 +127,17 @@ class _RoomScreenState extends State<RoomScreen> {
 
     if (value == null || !mounted) return;
 
-    int? hz;
+    // Aceita 145,550 / 145.550 / 145550, porque o piloto está com pressa.
+    final hz = value.isEmpty ? null : scope.config.frequencyHzFromInput(value);
 
-    if (value.isNotEmpty) {
-      // O teclado decimal do iOS usa o separador da localidade: em pt-BR vem
-      // vírgula, e double.tryParse só entende ponto.
-      final mhz = double.tryParse(value.replaceAll(',', '.'));
-
-      if (mhz == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Não entendi o número. Use algo como 145,550.'),
-        ));
-        return;
-      }
-
-      // Hz inteiro, nunca float: o arredondamento acontece aqui, uma vez.
-      hz = (mhz * 1000000).round();
-
-      if (!scope.config.isFrequencyValid(hz)) {
-        // Repetir o que foi entendido evita o mal-entendido mais comum:
-        // digitar 146000 querendo dizer 146,000.
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            'Entendi ${mhz.toStringAsFixed(3)} MHz, que está fora das faixas '
-            'do rádio (136–174 e 400–470 MHz).',
-          ),
-        ));
-        return;
-      }
+    if (value.isNotEmpty && hz == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Não consegui ler isso como uma frequência das faixas do rádio '
+          '(136–174 e 400–470 MHz). Tente 145,550 ou 145550.',
+        ),
+      ));
+      return;
     }
 
     await scope.rooms.update(
@@ -254,5 +239,24 @@ class _RoomScreenState extends State<RoomScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Seis dígitos bastam para qualquer frequência das faixas do rádio, escrita
+/// como MHz com decimais (145,550) ou como kHz (145550). O que passa disso é
+/// ignorado em vez de recusado: no ar, o piloto não vai ler mensagem de erro.
+class _FrequencyInput extends TextInputFormatter {
+  static final _allowed = RegExp(r'^[0-9]*[.,]?[0-9]*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue previous,
+    TextEditingValue next,
+  ) {
+    if (!_allowed.hasMatch(next.text)) return previous;
+
+    final digits = next.text.replaceAll(RegExp('[^0-9]'), '');
+
+    return digits.length > 6 ? previous : next;
   }
 }

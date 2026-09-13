@@ -788,6 +788,27 @@ class ServerConfig {
   bool isFrequencyValid(int hz) =>
       frequencyBands.any((band) => band.contains(hz));
 
+  /// Lê a frequência do jeito que o piloto digitou: `145,550`, `145.550`,
+  /// `145550` (kHz) ou `146`.
+  ///
+  /// Não é adivinhação: as faixas são estreitas (136–174 e 400–470 MHz), então
+  /// das três leituras possíveis no máximo uma cai dentro de alguma. Tentamos
+  /// MHz, kHz e Hz nessa ordem e ficamos com a primeira válida.
+  ///
+  /// A vírgula importa: o teclado decimal do iOS em pt-BR oferece vírgula, e
+  /// `double.tryParse` só entende ponto.
+  int? frequencyHzFromInput(String raw) {
+    final number = double.tryParse(raw.trim().replaceAll(',', '.'));
+    if (number == null) return null;
+
+    for (final multiplier in const [1000000, 1000, 1]) {
+      final hz = (number * multiplier).round();
+      if (isFrequencyValid(hz)) return hz;
+    }
+
+    return null;
+  }
+
   factory ServerConfig.fromJson(Map<String, dynamic> json) => ServerConfig(
         budgets: Budgets.fromJson(json['budgets'] as Map<String, dynamic>),
         frequencyBands: (json['frequency_bands'] as List<dynamic>)
@@ -4180,7 +4201,13 @@ class _Bootstrap extends StatefulWidget {
 }
 
 class _BootstrapState extends State<_Bootstrap> {
-  late final Future<AppScope> _ready = _start();
+  late Future<AppScope> _ready = _start();
+
+  /// A tela de erro precisa de saída. O caso comum não é rede ruim: é o iOS
+  /// perguntando pela permissão de Rede Local no primeiro arranque — o
+  /// GET /config falha enquanto o piloto ainda não tocou em Permitir, e sem
+  /// isto a única saída é matar o app e abrir de novo.
+  void _retry() => setState(() => _ready = _start());
 
   /// A ordem importa: GET /config antes de tudo, porque é dele que saem os
   /// orçamentos, e ele sincroniza o relógio de saída.

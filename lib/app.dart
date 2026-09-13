@@ -54,7 +54,13 @@ class _Bootstrap extends StatefulWidget {
 }
 
 class _BootstrapState extends State<_Bootstrap> {
-  late final Future<AppScope> _ready = _start();
+  late Future<AppScope> _ready = _start();
+
+  /// A tela de erro precisa de saída. O caso comum não é rede ruim: é o iOS
+  /// perguntando pela permissão de Rede Local no primeiro arranque — o
+  /// GET /config falha enquanto o piloto ainda não tocou em Permitir, e sem
+  /// isto a única saída seria matar o app e abrir de novo.
+  void _retry() => setState(() => _ready = _start());
 
   /// A ordem importa: GET /config antes de tudo, porque é dele que saem os
   /// orçamentos, e ele sincroniza o relógio de saída.
@@ -96,11 +102,33 @@ class _BootstrapState extends State<_Bootstrap> {
             return _plain(Scaffold(
               body: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: Text(
-                    'Não deu para falar com o servidor.\n\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Não deu para falar com o servidor.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Se o iOS acabou de pedir permissão de Rede Local, '
+                      'toque em Permitir e tente de novo.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _retry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tentar de novo'),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      '${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ),
             ));

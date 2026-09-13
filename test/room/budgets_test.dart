@@ -35,6 +35,29 @@ void main() {
     expect(config.serverTime.microsecondsSinceEpoch % 1000, 74);
   });
 
+  test('lê a frequência do jeito que o piloto digitou', () {
+    final config = ServerConfig.fromJson(payload);
+
+    // Vírgula é o separador do teclado decimal em pt-BR.
+    expect(config.frequencyHzFromInput('145,550'), 145550000);
+    expect(config.frequencyHzFromInput('145.550'), 145550000);
+    // Só dígitos: as faixas são estreitas, então só uma leitura cabe.
+    expect(config.frequencyHzFromInput('145550'), 145550000, reason: 'kHz');
+    expect(config.frequencyHzFromInput('145550000'), 145550000, reason: 'Hz');
+    expect(config.frequencyHzFromInput('146'), 146000000, reason: 'MHz');
+    expect(config.frequencyHzFromInput('446'), 446000000);
+    expect(config.frequencyHzFromInput(' 146 '), 146000000);
+  });
+
+  test('frequência que não cabe em nenhuma faixa e texto inválido dão null', () {
+    final config = ServerConfig.fromJson(payload);
+
+    expect(config.frequencyHzFromInput('200'), isNull, reason: 'entre as faixas');
+    expect(config.frequencyHzFromInput(''), isNull);
+    expect(config.frequencyHzFromInput('abc'), isNull);
+    expect(config.frequencyHzFromInput('145,,550'), isNull);
+  });
+
   test('as faixas de rádio validam frequência em Hz inteiro', () {
     final config = ServerConfig.fromJson(payload);
 

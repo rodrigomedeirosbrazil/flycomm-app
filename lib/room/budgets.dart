@@ -56,6 +56,30 @@ class ServerConfig {
   bool isFrequencyValid(int hz) =>
       frequencyBands.any((band) => band.contains(hz));
 
+  /// Lê a frequência do jeito que o piloto digitou.
+  ///
+  /// Aceita `145,550`, `145.550`, `145550` (kHz) e `145550000` (Hz), além de
+  /// `146` — porque o piloto está com pressa, às vezes de luva, e o teclado
+  /// decimal do iOS em pt-BR oferece vírgula enquanto `double.parse` quer
+  /// ponto.
+  ///
+  /// Não é adivinhação: as faixas do rádio são estreitas (136–174 e
+  /// 400–470 MHz), então das três leituras possíveis no máximo uma cai dentro
+  /// de alguma. Tentamos MHz, kHz e Hz nessa ordem e ficamos com a primeira
+  /// válida. Devolve null quando o texto não é número ou quando nenhuma
+  /// leitura cai numa faixa.
+  int? frequencyHzFromInput(String raw) {
+    final number = double.tryParse(raw.trim().replaceAll(',', '.'));
+    if (number == null) return null;
+
+    for (final multiplier in const [1000000, 1000, 1]) {
+      final hz = (number * multiplier).round();
+      if (isFrequencyValid(hz)) return hz;
+    }
+
+    return null;
+  }
+
   factory ServerConfig.fromJson(Map<String, dynamic> json) => ServerConfig(
         budgets: Budgets.fromJson(json['budgets'] as Map<String, dynamic>),
         frequencyBands: (json['frequency_bands'] as List<dynamic>)
