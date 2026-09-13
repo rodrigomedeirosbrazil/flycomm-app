@@ -50,3 +50,30 @@ Uint8List wrapPcmInWav(Uint8List pcm) {
 
   return file;
 }
+
+/// O pico absoluto das amostras, de 0 a 32768. Zero é silêncio digital: não
+/// "baixinho", mas literalmente nenhuma amostra diferente de zero.
+///
+/// Existe porque `duration_ms` e `size_bytes` saem da contagem de bytes e são
+/// **idênticos** para um segmento com fala e um segmento mudo. Uma gravação que
+/// não captou nada chega ao servidor com metadado impecável. Sem medir a
+/// amplitude, "o áudio do Android está mudo" não tem como ser distinguido de
+/// "o áudio não está tocando no receptor" — são falhas em pontas opostas da
+/// cadeia com exatamente o mesmo rastro.
+int peakAmplitudeOfPcm(Uint8List pcm) {
+  final view = ByteData.sublistView(pcm);
+
+  // Um stream cortado pode entregar um número ímpar de bytes; o byte solto no
+  // fim não é uma amostra e ler ele sozinho inventaria uma.
+  final samples = pcm.lengthInBytes ~/ 2;
+
+  var peak = 0;
+  for (var i = 0; i < samples; i++) {
+    // `abs()` e não `-v`: -32768 não tem oposto em int16 e negar devolveria
+    // -32768, fazendo o segmento mais alto possível parecer o mais silencioso.
+    final magnitude = view.getInt16(i * 2, Endian.little).abs();
+    if (magnitude > peak) peak = magnitude;
+  }
+
+  return peak;
+}

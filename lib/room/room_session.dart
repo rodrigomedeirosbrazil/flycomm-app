@@ -6,6 +6,7 @@ import '../audio/recorder.dart';
 import '../history/audio_store.dart';
 import '../history/database.dart';
 import '../history/history_repository.dart';
+import '../trace.dart';
 import 'budgets.dart';
 import 'catchup_repository.dart';
 import 'message_api.dart';
@@ -13,7 +14,6 @@ import 'message_uploader.dart';
 import 'models.dart';
 import 'reverb_client.dart';
 import 'server_clock.dart';
-import 'trace.dart';
 
 /// Uma sessão de sala aberta: o WebSocket, a fila, o gravador e o histórico
 /// amarrados. Uma instância por sala aberta; `dispose` ao sair.

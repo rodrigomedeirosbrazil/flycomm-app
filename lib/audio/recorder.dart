@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
+import '../trace.dart';
 import 'segmenter.dart';
 import 'wav.dart';
 
@@ -72,12 +73,50 @@ class PttRecorder {
     _recording = true;
 
     final stream = await _recorder.startStream(
-      const RecordConfig(
+      RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
         numChannels: channels,
-        // Eco e ruído ficam ligados: o piloto está num ambiente barulhento e
-        // meio-duplex já garante que nada toca enquanto ele fala.
+
+        // A fonte de áudio. `camcorder` no Android não é escolha estética:
+        // é a única das seis testadas que captou voz no aparelho de bancada.
+        //
+        // Varredura num Galaxy A12 (MediaTek MT6765), seis gravações de 3 s
+        // seguidas, mesma voz, mesma distância, num app isolado que só tinha
+        // o pacote `record` — sem `audio_session`, sem player, sem flycomm:
+        //
+        //   fonte              taxa     pico    modulação   veredito
+        //   defaultSource      16 kHz    388      0.257     ruído
+        //   defaultSource      48 kHz    129      0.276     ruído
+        //   mic              44,1 kHz    118      0.273     ruído
+        //   unprocessed        48 kHz      6      0.040     mudo
+        //   voiceRecognition   48 kHz     71      0.120     ruído
+        //   camcorder          48 kHz  32767      0.887     FALA
+        //
+        // Não é diferença de grau, é a diferença entre ter voz e não ter. E o
+        // padrão que o `camcorder` quebra explica o resto: todas as fontes que
+        // falharam usam o microfone **principal**, e a que funcionou usa o
+        // **secundário**, o de perto da câmera. O microfone principal deste
+        // aparelho não entrega áudio.
+        //
+        // Por isso nenhum ajuste anterior adiantou. Foram testados e todos
+        // falharam pelo mesmo motivo — mexiam no ganho de um sinal que não
+        // existia: `autoGain` (+2 dB e mais chiado), `voiceCommunication`
+        // (piorou para 146), captura a 48 kHz (piorou para 112), e ganho
+        // digital nosso, que amplificou ruído. A subtração espectral não
+        // recuperou nenhuma palavra — porque não havia palavra ali.
+        //
+        // ATENÇÃO ANTES DE GENERALIZAR: isto é uma medição em **um** aparelho,
+        // que muito provavelmente tem o microfone principal defeituoso ou
+        // obstruído. `camcorder` usa um microfone mais distante da boca e
+        // afinado para captação ampla — não é a escolha certa para um rádio
+        // num aparelho são. Antes de isto virar padrão de verdade, precisa
+        // rodar a mesma varredura num segundo Android. O caminho honesto a
+        // prazo é escolher a fonte medindo, não fixando: gravar, olhar o pico,
+        // e cair para outra fonte se vier silêncio.
+        androidConfig: AndroidRecordConfig(
+          audioSource: AndroidAudioSource.camcorder,
+        ),
       ),
     );
 
@@ -109,6 +148,13 @@ class PttRecorder {
   }
 
   void _emit(Uint8List pcm) {
+    // O pico é a única coisa que distingue um segmento com fala de um segmento
+    // mudo: duração e tamanho saem da contagem de bytes e são idênticos nos
+    // dois casos. Sem isto, uma captura que não captou nada sobe com metadado
+    // impecável e o defeito só aparece no ouvido de outra pessoa.
+    trace('segmento $_index: ${durationMsOfPcm(pcm.length)}ms '
+        'pico=${peakAmplitudeOfPcm(pcm)}/32768');
+
     _segments.add(CapturedSegment(
       id: _uuid.v4(),
       burstId: _burstId!,

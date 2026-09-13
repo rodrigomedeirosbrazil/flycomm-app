@@ -345,3 +345,111 @@ narra ingest → download → disco → fila → reprodução, só em debug. O s
 "todas as mensagens chegam atrasadas e não tocam" teve **três causas diferentes**
 nesta sessão, e nenhuma delas era visível no log do servidor — ele é cego para
 tudo o que acontece dentro do app.
+
+---
+
+## Captura no Android: o microfone principal do aparelho de bancada não grava
+
+Data: 2026-09-13 · Galaxy A12 (SM-A125M, MediaTek MT6765), Android 12
+
+Sintoma relatado: "o áudio enviado pelo Android está mudo". Resolvido, mas o
+caminho até a causa é mais útil que a correção, porque ela tem uma linha e a
+investigação teve seis tentativas erradas.
+
+### A correção
+
+`AndroidRecordConfig(audioSource: AndroidAudioSource.camcorder)`.
+
+### O que a medição mostrou
+
+Varredura num app isolado — só o pacote `record`, sem `audio_session`, sem
+player, sem nada do flycomm. Seis gravações de 3 s seguidas, mesma voz, mesma
+distância:
+
+| fonte | taxa | pico | modulação | 100–1k Hz | veredito |
+|---|---|---|---|---|---|
+| `defaultSource` | 16 kHz | 388 | 0,257 | 46,2% | ruído |
+| `defaultSource` | 48 kHz | 129 | 0,276 | 21,4% | ruído |
+| `mic` | 44,1 kHz | 118 | 0,273 | 22,7% | ruído |
+| `unprocessed` | 48 kHz | 6 | 0,040 | 9,0% | mudo |
+| `voiceRecognition` | 48 kHz | 71 | 0,120 | 13,1% | ruído |
+| **`camcorder`** | 48 kHz | **32767** | **0,887** | **59,7%** | **FALA** |
+
+Todas as fontes que falharam usam o microfone **principal**; a única que
+funcionou usa o **secundário**, o de perto da câmera. O microfone principal
+deste aparelho não entrega áudio.
+
+### Por que seis tentativas antes disso falharam
+
+Todas partiam de "chega baixo" e mexiam em nível. Não havia sinal para
+amplificar:
+
+| tentativa | resultado |
+|---|---|
+| `autoGain` (efeito `AutomaticGainControl`) | +2 dB e mais chiado |
+| fonte `voiceCommunication` | piorou: pico 363 → 146 |
+| captura a 48 kHz nativos | piorou: pico → 112 |
+| ganho digital nosso, +18 a +30 dB | amplificou ruído |
+| subtração espectral | **nenhuma palavra recuperada** |
+
+A subtração espectral foi o que finalmente fechou a questão: ela não recupera o
+que não foi gravado. Quando o piloto disse que o arquivo "recuperado" não tinha
+nada para escutar, a pergunta deixou de ser "por que está baixo" e passou a ser
+"a voz está aqui?".
+
+### Os instrumentos que faltavam
+
+**`peakAmplitudeOfPcm`** ([wav.dart](../lib/audio/wav.dart)). `duration_ms` e
+`size_bytes` saem da contagem de bytes e são **idênticos** para um segmento com
+fala e um mudo — uma gravação que não captou nada sobe com metadado impecável.
+Foi por isso que este defeito atravessou toda a seção 8 sem aparecer.
+
+**A comparação controlada.** O histórico local guarda as duas pontas. Com
+`direction` no SQLite do aparelho: `received` (gravado no iPhone) deu pico
+9134; `delivered` (gravado ali) deu 146 a 456. Mesma sala, mesmo app, mesmo
+armazenamento — 26 a 30 dB de diferença, e nenhuma configuração mexeu nisso.
+
+**A modulação.** Pico sozinho não distingue fala fraca de ruído. O desvio da
+energia sobre a média separa: ruído fica abaixo de 0,15, fala passa de 0,6. Foi
+essa métrica que condenou a `voiceCommunication` (0,051, envelope chato) e
+absolveu a `camcorder` (0,887).
+
+### Erros de leitura cometidos e corrigidos no caminho
+
+- `bt_a2dp` listado como "Current" no `dumpsys audio` foi lido como rota ativa.
+  Era a tabela de volumes por dispositivo; o Bluetooth estava desconectado.
+- `openInputStream sampleRate = 8000` quase virou "taxa errada". Havia dois
+  streams abertos; o nosso era o de 16000, identificável pelo
+  `com.llfbandit.record` pedindo e devolvendo foco em volta do segmento.
+- O envelope subindo de 55 a 363 foi lido como prova de fala. Era rampa de
+  aquecimento seguida de oscilação rasa — não prova nada.
+
+### O que fica em aberto
+
+**Isto é uma medição em UM aparelho, provavelmente defeituoso.** `camcorder`
+usa um microfone mais distante da boca e afinado para captação ampla; não é a
+escolha certa para um rádio num celular são. Antes de virar padrão, a mesma
+varredura precisa rodar num segundo Android.
+
+**A saída boa é escolher a fonte medindo, não fixando.** Já existe
+`peakAmplitudeOfPcm`: gravar, olhar o pico, e cair para outra fonte quando vier
+silêncio funciona em qualquer aparelho.
+
+**Tela de configuração de microfone** — pedida pelo piloto ao ver este
+resultado, e é a conclusão certa: se o aparelho tem vários microfones e um
+deles pode estar quebrado, quem está no cockpit precisa poder trocar sem
+recompilar. Fase a definir.
+
+### A lição de método
+
+O piloto sugeriu pesquisar antes de tentar de novo, e estava certo: o README do
+`record_android` já dizia três das coisas que as tentativas descobriram na
+marra — *"there is no gain settings to play with"*, *"choosing source other than
+default or mic will likely lower the output volume"*, *"applying effects will
+lower the output volume"*.
+
+E o teste que resolveu — um app isolado com só o pacote `record`, varrendo as
+fontes — deveria ter vindo antes de qualquer ajuste, porque ele **particiona**
+o problema: qualquer que fosse o resultado, metade das hipóteses morria. Ajuste
+seguido de teste só responde sobre o ajuste.
+
