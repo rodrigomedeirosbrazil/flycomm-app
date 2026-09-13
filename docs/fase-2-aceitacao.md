@@ -160,3 +160,52 @@ o `AppScope` abaixo do `MaterialApp` (só aparece ao abrir a segunda tela), a fa
 frequência (depende do separador decimal da localidade). Nenhum foi pego por 42 testes
 de unidade, 22 de integração ou `flutter analyze` limpo. É o argumento de que esta
 seção 8 não é opcional.
+
+---
+
+## 7.1 Escuta em segundo plano no iOS — conexão verificada, áudio pendente
+
+A fatia antecipada da Fase 4 (§7.1 da spec). Duas tentativas, e a primeira falhou de
+um jeito instrutivo.
+
+**Tentativa 1 — `UIBackgroundModes: audio` + sessão ativa. Falhou.**
+
+Com a tela bloqueada, a fala publicada chegou assim:
+
+```
+201  POST /rooms/1/messages
+200  POST /broadcasting/auth       ← reconexão
+200  GET  /rooms/1/catchup
+200  GET  /messages/.../audio
+```
+
+O download veio **depois** de um `broadcasting/auth`: o aparelho reconectou ao
+desbloquear e pegou a mensagem pelo catch-up, já vencida, marcada *atrasada*. Não
+recebeu ao vivo. O app tinha sido suspenso.
+
+Causa: `UIBackgroundModes: audio` mantém o app vivo **enquanto ele está de fato
+produzindo áudio**. Sessão ativa mas silenciosa não segura nada — e o caso do flycomm
+é o silencioso, porque esperar alguém falar é o oposto de tocar.
+
+**Tentativa 2 — silêncio em laço. Conexão sobreviveu.**
+
+```
+20:11:24   catchup + broadcasting/auth + catchup   entrada na sala, tela ligada
+20:11:49   GET /messages/35da3385/audio            25 s depois, SEM auth no meio
+```
+
+Sem `broadcasting/auth` entre a publicação e o download: não houve reconexão. O
+WebSocket estava vivo com a tela bloqueada, recebeu o `message.new` e baixou o áudio.
+**O processo sobreviveu ao segundo plano.**
+
+O que ainda falta confirmar: se o som sai no alto-falante. Conexão viva e áudio
+audível são duas perguntas separadas, e a primeira era a difícil.
+
+**O teste que ainda não foi feito** é o que a Fase 4 chama de verdadeiro: uma hora com
+o celular no bolso. Ele responde se o iOS sustenta isto ou derruba depois de um tempo,
+e é a resposta que a Fase 3 precisa antes de desenhar a eleição de ponte.
+
+**O silêncio em laço é andaime, não solução.** Gasta bateria continuamente e a Apple
+desencoraja, sendo motivo conhecido de recusa na App Store. Decisão registrada: o iOS
+não vai para a loja por ora; quando for, troca-se pelo framework PushToTalk, que a
+spec do sistema já previa como Fase 5.
