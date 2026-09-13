@@ -24,15 +24,19 @@ Disso saem dois orçamentos:
 
 | Config | Padrão | Significado |
 |---|---|---|
-| `playback_deadline` | 30 s | idade máxima para o app tocar sozinho |
-| `radio_relay_deadline` | 10 s | idade máxima para ir ao ar (usado na Fase 3, definido aqui) |
-| `segment_max` | 5 s | teto do segmento |
-| `catchup_window` | 60 s | quanto o catch-up de reconexão olha para trás |
-| `blob_ttl` | 5 min | vida do áudio no storage |
+| `playback_deadline_ms` | 30 s | idade máxima para o app tocar sozinho |
+| `radio_relay_deadline_ms` | 10 s | idade máxima para ir ao ar (usado na Fase 3, definido aqui) |
+| `segment_max_ms` | 5 s | teto do segmento |
+| `catchup_window_ms` | 60 s | quanto o catch-up de reconexão olha para trás |
+| `blob_ttl_ms` | 5 min | vida do áudio no storage |
 
 **Todos configuráveis no servidor**, entregues ao app no login e na entrada da sala. Os valores são chutes a calibrar em campo, e calibrar não pode depender de publicar versão nova na loja.
 
+Os nomes carregam a unidade porque os valores trafegam em milissegundos inteiros — `playback_deadline_ms: 30000` —, do mesmo jeito que o `duration_ms` da mensagem. A tabela acima mostra o padrão em segundos só por legibilidade.
+
 **A idade é medida contra o relógio do servidor**, nunca o do celular. Relógios de celular derivam; um device adiantado descartaria mensagens boas e um atrasado tocaria mensagens vencidas. O app calcula o desvio a partir da resposta HTTP e aplica na comparação.
+
+Para o app não depender só do header `Date`, `GET /config` e `GET /rooms/{id}/catchup` devolvem um campo `server_time` explícito, em ISO 8601 com microssegundos e sufixo `Z`. É esse o relógio contra o qual toda idade é medida.
 
 ### 2.1 O que isso muda na spec anterior
 
@@ -63,6 +67,8 @@ Nome, frequência e um código de convite. Nada mais.
 Mas o vínculo membro↔sala já nasce com coluna `role`, todos `member`, ninguém checando nada. O modelo de papéis (dono + admins + membros) vai chegar; quando chegar, é escrever policies, não migrar dados.
 
 **Entrada por código curto** (`FLY-7K2M`). É a menor superfície que já é testável de verdade: dois celulares, um código digitado, sala compartilhada. Deep link (`flycomm://join/...`) é literalmente isto embrulhado, e entra quando o app estiver de pé. Convite nominal exigiria modelo de convites pendentes e busca de usuários — uma decisão de privacidade que não precisa ser tomada agora.
+
+O corpo do código são 4 caracteres do alfabeto `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` — sem `0`/`O` nem `1`/`I`, porque o código é ditado em voz alta, às vezes pelo próprio rádio. O servidor normaliza o que o piloto digita: aceita minúscula, com ou sem hífen, com ou sem o prefixo `FLY`.
 
 ---
 
@@ -128,15 +134,29 @@ GET    /messages/{id}/audio  com Range, retomável
 GET    /rooms/{id}/catchup   o que foi publicado na janela e eu não vi
 ```
 
+Sem prefixo: os caminhos são literalmente esses. Todos exigem token Sanctum, menos dois: `POST /auth/device`, que é onde o token nasce, e `GET /config`, que não carrega segredo nenhum e precisa ser legível antes do primeiro login — é dele que o app tira os orçamentos para decidir o que fazer com o que gravou offline.
+
+Quatro detalhes do contrato que não são óbvios:
+
+**`POST /auth/device` recebe `{identifier, secret, display_name}`.** O `display_name` só é obrigatório na criação; numa recuperação ele é ignorado, porque o nome canônico vive no servidor e quem o muda é `PATCH /me`. O `secret` é guardado com bcrypt, o que impõe um teto de 72 bytes — acima disso o algoritmo trunca em silêncio e dois segredos diferentes viram o mesmo. Cada chamada emite um token novo e revoga o anterior daquele dispositivo.
+
+**O `id` da mensagem é gerado pelo app, não pelo servidor.** É o que torna `POST /rooms/{id}/messages` idempotente: a seção 2.1 manda o upload insistir durante toda a janela de validade, e sem um id estável cada retentativa em rede ruim criaria uma mensagem duplicada na sala. Reenviar um id que já existe devolve a mensagem gravada, sem republicar o evento; reaproveitar o id de outra sala é conflito.
+
+**`GET /rooms/{id}/catchup` aceita `?since=<ISO 8601>`.** O app manda o `created_at` da última mensagem que viu — um carimbo que o próprio servidor emitiu, nunca o relógio do celular. O piso efetivo é `max(since, agora - catchup_window)`: um `since` mais antigo que a janela é ignorado de propósito, porque ausência longa não deve ser coberta. A resposta devolve o `window_start` que realmente valeu, e é comparando-o com o `since` enviado que o app descobre que houve um buraco no histórico — sem isso, o buraco existiria sem nenhum indício.
+
+**Erro de validação responde 422 com JSON, sempre.** Não há redirecionamento: a API não serve HTML, e um 302 no lugar de um 422 é um modo de falha caro de depurar em rede ruim.
+
 ### 6.3 Eventos
 
 Presence channel `room.{id}`:
 
-- `message.new` — só metadados: `id`, `burst_id`, `index`, autor, `duration_ms`, `origin`, `format`, `created_at`
+- `message.new` — só metadados, no mesmo formato que `POST /rooms/{id}/messages` e `catchup` devolvem: `id`, `room_id`, `burst_id`, `index`, `user` (objeto com `id` e `display_name`, ou `null` quando a origem é `radio`), `duration_ms`, `origin`, `format`, `size_bytes`, `captured_at`, `created_at`, `expires_at`, `audio_url`
 - `room.updated` — nome e frequência; todo mundo precisa ver a frequência mudar sem recarregar
 - presença nativa do canal — entrada e saída, sem código adicional
 
-Reverb carrega apenas eventos, nunca áudio (6.2 da spec anterior).
+Mensagem tem um formato só, nos três lugares onde aparece. Três definições do mesmo objeto divergiriam, e divergiriam justamente no caminho em que o app precisa tratar as três como a mesma coisa: a que chegou pelo evento, a que voltou do upload e a que veio no catch-up são a mesma mensagem.
+
+Reverb carrega apenas eventos, nunca áudio (6.2 da spec anterior). O `audio_url` é um link para `GET /messages/{id}/audio`, não o conteúdo.
 
 ### 6.4 Infraestrutura local
 
