@@ -110,6 +110,50 @@ void main() {
         reason: 'os três segmentos de uma fala de 12 s aparecem em ordem');
   });
 
+  test('chegar não é ter sido ouvida', () async {
+    // A mensagem entra como `received` no instante em que chega, antes de
+    // entrar na fila. Se "já ouvi isto?" fosse lida do estado, tudo o que
+    // chegasse pareceria ouvido.
+    await history.recordIncoming(incoming('p-1'), MessageState.received);
+    expect((await history.byId('p-1'))!.played, isFalse);
+
+    await history.markPlayed('p-1');
+    expect((await history.byId('p-1'))!.played, isTrue);
+  });
+
+  test('ouvir uma atrasada por toque não a torna pontual', () async {
+    await history.recordIncoming(incoming('p-2'), MessageState.late);
+
+    await history.markHeard('p-2');
+    final row = (await history.byId('p-2'))!;
+
+    expect(row.played, isTrue);
+    expect(row.state, MessageState.late,
+        reason: 'ela não tocou ao vivo, e isso não deixa de ser verdade '
+            'porque o piloto foi ouvi-la depois');
+  });
+
+  test('a tela recebe a mais nova primeiro, para desenhar de trás para frente',
+      () async {
+    await history.recordIncoming(
+        incoming('w-1', capturedAt: DateTime.utc(2026, 9, 13, 16)),
+        MessageState.received);
+    await history.recordIncoming(
+        incoming('w-3', capturedAt: DateTime.utc(2026, 9, 13, 16, 2)),
+        MessageState.received);
+    await history.recordIncoming(
+        incoming('w-2', capturedAt: DateTime.utc(2026, 9, 13, 16, 1)),
+        MessageState.received);
+
+    final rows = await history.watchRoom(255).first;
+
+    expect(rows.map((r) => r.id), ['w-3', 'w-2', 'w-1']);
+    expect(rows.map((r) => r.id).toList().reversed,
+        (await history.forRoom(255)).map((r) => r.id),
+        reason: 'invertida, é exatamente a ordem cronológica de forRoom — '
+            'duas ordens diferentes para o mesmo histórico seria bug');
+  });
+
   test('o sucesso depois do prazo é entregue atrasada, não entregue', () async {
     await history.recordOutgoing(
       id: 'out-3',

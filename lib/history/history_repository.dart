@@ -95,7 +95,23 @@ class HistoryRepository {
       (db.update(db.localMessages)..where((t) => t.id.equals(id)))
           .write(LocalMessagesCompanion(audioPath: Value(path)));
 
-  Future<void> markPlayed(String id) => _setState(id, MessageState.received);
+  /// Tocou de verdade, pela fila. Estado e `played` andam juntos aqui, mas
+  /// não são a mesma coisa: o estado diz o que aconteceu com a mensagem, e
+  /// `played` diz se o piloto ouviu.
+  Future<void> markPlayed(String id) =>
+      (db.update(db.localMessages)..where((t) => t.id.equals(id))).write(
+        const LocalMessagesCompanion(
+          state: Value(MessageState.received),
+          played: Value(true),
+        ),
+      );
+
+  /// Tocou por toque no histórico. O estado fica como está de propósito: uma
+  /// atrasada continua atrasada depois de ouvida — ela **não** tocou ao vivo, e
+  /// apagar isso apagaria a informação de que a conversa se perdeu na hora.
+  Future<void> markHeard(String id) =>
+      (db.update(db.localMessages)..where((t) => t.id.equals(id)))
+          .write(const LocalMessagesCompanion(played: Value(true)));
 
   /// Saiu da fila sem tocar, ou o áudio não pôde ser baixado. Fica ouvível por
   /// toque, nunca automaticamente.
@@ -120,12 +136,23 @@ class HistoryRepository {
             ]))
           .get();
 
+  /// A mais nova primeiro. A tela desenha esta lista de trás para frente, o
+  /// que põe a fala mais recente embaixo e mantém a rolagem colada nela —
+  /// ordenar ao contrário aqui e inverter lá daria a mesma tela, mas perderia
+  /// o grude: a lista cresceria pelo fim, longe de onde o olho está.
+  ///
+  /// Os três critérios são os mesmos de [forRoom], e precisam continuar
+  /// sendo: duas ordens diferentes para o mesmo histórico é bug esperando.
   Stream<List<LocalMessage>> watchRoom(int roomId) =>
       (db.select(db.localMessages)
             ..where((t) => t.roomId.equals(roomId))
             ..orderBy([
-              (t) => OrderingTerm(expression: t.recordedAt, mode: OrderingMode.desc),
-              (t) => OrderingTerm(expression: t.segmentIndex, mode: OrderingMode.desc),
+              (t) => OrderingTerm(
+                  expression: t.recordedAt, mode: OrderingMode.desc),
+              (t) =>
+                  OrderingTerm(expression: t.burstId, mode: OrderingMode.desc),
+              (t) => OrderingTerm(
+                  expression: t.segmentIndex, mode: OrderingMode.desc),
             ]))
           .watch();
 

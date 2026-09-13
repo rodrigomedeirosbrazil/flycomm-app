@@ -284,6 +284,9 @@ class RoomSession {
 
     try {
       await player.play(audioStore.pathFor(messageId));
+      // Ouvida por toque conta como ouvida: a pergunta que a marca responde é
+      // "já escutei isto?", não "a fila tocou isto?".
+      await history.markHeard(messageId);
       return null;
     } catch (error) {
       return 'Não deu para tocar: $error';

@@ -274,8 +274,13 @@ class _RoomScreenState extends State<RoomScreen> {
                 if (rows.isEmpty) {
                   return const Center(child: Text('Nada dito ainda.'));
                 }
+                // De trás para frente: o índice 0 — a fala mais nova — fica
+                // embaixo, e a rolagem nasce colada nele. É o que dá o
+                // autoscroll de graça, sem ScrollController e sem o salto que
+                // um `jumpTo` no fim da lista produz. Quem rolou para cima
+                // para reler algo fica onde estava, que é o certo.
                 return ListView.separated(
-                  reverse: false,
+                  reverse: true,
                   itemCount: rows.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) => MessageTile(

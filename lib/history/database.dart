@@ -57,6 +57,16 @@ class LocalMessages extends Table {
   TextColumn get direction => textEnum<MessageDirection>()();
   TextColumn get state => textEnum<MessageState>()();
 
+  /// Se a fala já saiu pelo alto-falante — de verdade, não "chegou".
+  ///
+  /// Não dá para derivar isto do estado: a mensagem entra no histórico como
+  /// [MessageState.received] no momento em que chega, antes de entrar na fila,
+  /// e o estado não muda quando ela toca. Uma fala que chegou e uma que o
+  /// piloto ouviu ficam idênticas, e é exatamente essa a pergunta dele: já
+  /// ouvi isto? Uma coluna à parte também sobrevive ao toque no histórico, que
+  /// não muda estado nenhum.
+  BoolColumn get played => boolean().withDefault(const Constant(false))();
+
   /// Caminho do arquivo no dispositivo. Nulo enquanto o download não terminou.
   TextColumn get audioPath => text().nullable()();
 
@@ -76,5 +86,19 @@ class HistoryDatabase extends _$HistoryDatabase {
       : super(executor ?? driftDatabase(name: 'flycomm_history'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  /// O histórico é permanente e 100% local: o servidor é transporte, não
+  /// arquivo. Recriar a tabela numa migração apaga a única cópia que existe.
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          // v2: `played`. As mensagens que já estavam lá ficam como não
+          // tocadas — é mentira para algumas, mas é a mentira segura: dizer
+          // "ainda não ouviu" sobre algo já ouvido custa um toque; o contrário
+          // esconde uma fala que ninguém escutou.
+          if (from < 2) await m.addColumn(localMessages, localMessages.played);
+        },
+      );
 }
