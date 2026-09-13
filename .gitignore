@@ -6,3 +6,11 @@ build/
 .idea/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Flutter/Dart
+*.g.dart
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.podspec
+android/.gradle/
+android/local.properties
