@@ -72,7 +72,23 @@ vale, ainda que por um caminho diferente do que o critério 3 pede.
 
 ## 4. Wi-Fi desligado em A — **pendente**
 
-## 5. Mudança de frequência — **pendente**
+## 5. Mudança de frequência — **cumprido**
+
+Alterada de 145,550 para 146,000 MHz no iPhone (`PATCH /rooms/255` → 200). O
+simulador passou a mostrar **146.000 MHz** sem nenhum toque e sem recarregar: só o
+evento `room.updated` chegando pelo presence channel.
+
+Achado no caminho, corrigido antes de passar — o editor de frequência tinha três
+defeitos que só o uso real expõe:
+
+1. `double.tryParse(value)!` derrubava o app com entrada não parseável. O teclado
+   decimal do iOS em pt-BR usa **vírgula**, então `145,550` virava `null` e o `!`
+   crashava. Nunca usar `!` no que veio de teclado.
+2. Vírgula não era normalizada para ponto — o formato natural em português não
+   funcionava.
+3. A ajuda não dizia unidade nem faixas, então digitar `146000` querendo dizer
+   `146,000` parecia razoável, e o erro não dava pista do mal-entendido. Agora a
+   mensagem repete o valor entendido.
 
 ---
 
@@ -89,3 +105,19 @@ quando `format` passa a escolher decodificador.
 
 **Identidades são por aparelho.** iPhone e simulador geraram credenciais próprias no
 primeiro uso e viraram dois usuários distintos, sem nenhum passo manual.
+
+**Identidade sobrevive à reinstalação; histórico não.** Reinstalar o app no iPhone
+devolveu `200` em `POST /auth/device` em vez de `201`: o par identifier/secret ficou
+no Keychain e o piloto continuou o mesmo, com as mesmas salas. Já o histórico local
+foi junto com o SQLite do app.
+
+A assimetria é consequência direta do desenho — o servidor é transporte e não repõe
+histórico —, mas é o tipo de coisa que surpreende em campo: "reinstalei e perdi as
+conversas, mas continuo sendo eu". Vale uma linha na UI quando a Fase 2 virar produto.
+
+**Três dos bugs encontrados hoje não eram alcançáveis por teste automatizado:**
+o `AppScope` abaixo do `MaterialApp` (só aparece ao abrir a segunda tela), a falta de
+`NSLocalNetworkUsageDescription` (o simulador não impõe a regra) e o `!` no parse da
+frequência (depende do separador decimal da localidade). Nenhum foi pego por 42 testes
+de unidade, 22 de integração ou `flutter analyze` limpo. É o argumento de que esta
+seção 8 não é opcional.
