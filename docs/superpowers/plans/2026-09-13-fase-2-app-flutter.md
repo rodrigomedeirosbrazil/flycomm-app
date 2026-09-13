@@ -4130,17 +4130,35 @@ import 'room/server_clock.dart';
 import 'ui/app_scope.dart';
 import 'ui/rooms_screen.dart';
 
+final _theme = ThemeData(
+  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B4965)),
+  useMaterial3: true,
+);
+
 class FlycommApp extends StatelessWidget {
   const FlycommApp({super.key});
+
+  // Sem MaterialApp aqui: ele precisa ficar ABAIXO do AppScope. Ver _Shell.
+  @override
+  Widget build(BuildContext context) => const _Bootstrap();
+}
+
+/// O MaterialApp propriamente dito, montado DENTRO do AppScope.
+///
+/// A ordem importa e é fácil errar. O Navigator vive dentro do MaterialApp, e
+/// uma rota empurrada por ele é irmã do `home`, não filha dele. Com o AppScope
+/// no `home`, a tela de salas o encontra e a tela da sala não — e a falha é
+/// "AppScope não encontrado acima deste widget", em tempo de execução, só
+/// quando alguém abre a segunda tela. Nenhum teste e nenhum `flutter analyze`
+/// pega isso.
+class _Shell extends StatelessWidget {
+  const _Shell();
 
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'flycomm',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B4965)),
-          useMaterial3: true,
-        ),
-        home: const _Bootstrap(),
+        theme: _theme,
+        home: const RoomsScreen(),
       );
 }
 
@@ -4182,7 +4200,7 @@ class _BootstrapState extends State<_Bootstrap> {
       history: HistoryRepository(db),
       audioStore: await AudioStore.open(),
       userId: user.id,
-      child: DatabaseHolder(db: db, child: const RoomsScreen()),
+      child: DatabaseHolder(db: db, child: const _Shell()),
     );
   }
 
@@ -4191,7 +4209,7 @@ class _BootstrapState extends State<_Bootstrap> {
         future: _ready,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Scaffold(
+            return _plain(Scaffold(
               body: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Center(
@@ -4201,17 +4219,25 @@ class _BootstrapState extends State<_Bootstrap> {
                   ),
                 ),
               ),
-            );
+            ));
           }
           if (!snapshot.hasData) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+            return _plain(
+              const Scaffold(body: Center(child: CircularProgressIndicator())),
             );
           }
           return snapshot.data!;
         },
       );
 }
+
+/// Arranque e falha de arranque acontecem antes de existir um MaterialApp, e um
+/// Scaffold sem Directionality nem tema explode.
+Widget _plain(Widget child) => MaterialApp(
+      title: 'flycomm',
+      theme: _theme,
+      home: child,
+    );
 ```
 
 - [ ] **Passo 4: escrever `lib/ui/rooms_screen.dart`**
