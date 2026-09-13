@@ -7,7 +7,8 @@ Dispositivos:
 - **A** — iPhone de Rodrigo, iOS 26.6.2, build release assinado (`br.com.medeirostec.flycomm`)
 - **B** — Simulador iPhone 17 Pro, iOS 26.5, build debug
 
-Sala: **Voo de domingo** (`FLY-TEST`, id 255), 145.550 MHz.
+Sala: **Voo de domingo** (`FLY-TEST`). O servidor foi re-semeado durante a
+revisão da spec; a sala passou a ser **id 1**.
 
 ---
 
@@ -70,7 +71,28 @@ Observação lateral já obtida: ao entrar na sala às 15:20, os três segmentos
 vencido (`blob_ttl` de 5 min). Áudio velho não toca sozinho — a invariante da seção 2.1
 vale, ainda que por um caminho diferente do que o critério 3 pede.
 
-## 4. Wi-Fi desligado em A — **pendente**
+## 4. Wi-Fi desligado em A e religado dentro do `delivery_deadline` — **lado B verificado**
+
+A spec foi revista (commit `a447aab` no `flycomm`): a mensagem vencida agora **sobe**,
+não toca em ninguém, aparece como **atrasada** e é encaixada onde foi **gravada**.
+
+O lado receptor foi verificado sem os dois aparelhos, publicando direto na API: uma
+fala fresca e, **depois**, uma de 2 minutos atrás.
+
+| Ordem de chegada | `captured_at` | Como apareceu |
+|---|---|---|
+| 1ª | agora | topo, alto-falante — tocou |
+| 2ª | −2 min | **abaixo** da fresca, "atrasada — toque para ouvir" — não tocou |
+
+A atrasada chegou depois e ficou embaixo: a ordenação é por `captured_at`, não por
+chegada. É o comportamento que a §2.1 descreve.
+
+Falta o lado A com aparelho de verdade: a mensagem gravada offline tem de aparecer no
+iPhone como **entregue atrasada**.
+
+## 4b. Wi-Fi desligado além do `delivery_deadline` — **pendente**
+
+Exige ficar offline mais de 5 minutos.
 
 ## 5. Mudança de frequência — **cumprido**
 
