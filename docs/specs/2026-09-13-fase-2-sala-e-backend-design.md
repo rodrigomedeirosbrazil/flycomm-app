@@ -10,6 +10,8 @@ A sala e o backend rodando em terra, sem rádio e sem ESP32. Dois ou mais celula
 
 Fora do escopo, cada um na sua fase: BLE e firmware (Fase 1), ponte e eleição (Fase 3), segundo plano (Fase 4), PTT externo (Fase 5).
 
+**Uma exceção declarada: escuta em segundo plano no iOS.** A seção 7.1 antecipa uma fatia estreita da Fase 4 — só reprodução, só iOS. O resto do segundo plano continua na Fase 4.
+
 A Fase 2 é útil sozinha — um walkie-talkie de grupo sobre rede de dados — e é isso que a torna testável antes de existir qualquer rádio.
 
 ---
@@ -239,6 +241,20 @@ Módulos da Fase 2: `audio/`, `room/`, `history/`, `ui/`. Os módulos `ble/`, `b
 
 **Histórico** em SQLite (drift) com os arquivos de áudio no dispositivo. Permanente, e 100% local: quem não estava na sala naquele voo nunca vê aquelas mensagens.
 
+### 7.1 Escuta em segundo plano no iOS — fatia antecipada da Fase 4
+
+O segundo plano é da Fase 4 e continua sendo. Esta é uma exceção estreita e deliberada, e o motivo de antecipá-la não é comodidade: **a Fase 3 depende dela sem dizer**. A ponte precisa ouvir o rádio com o celular no bolso; se o app não sobrevive à tela apagada, a eleição de ponte é desenhada sobre uma premissa falsa. Descobrir isso agora custa pouco; descobrir no meio da Fase 3, com BLE e supressão de eco sendo depurados ao mesmo tempo, custa caro.
+
+Há evidência de que a premissa é falsa hoje: em bancada, o aparelho **sai da presença quando a tela bloqueia**. O WebSocket cai junto, e sem `message.new` não há o que tocar — o problema não é o áudio, é a conexão morrer.
+
+**O que entra:** `UIBackgroundModes: audio`, a `AVAudioSession` mantida **ativa** (não só configurada), uma ação explícita de **entrar em voo** feita com o app aberto, e tratamento de interrupção e mudança de rota — ligação entrando, fone conectando.
+
+A ação de entrar em voo não é enfeite de tela. No Android ela será obrigatória (desde o Android 12 um serviço com tipo `microphone` só inicia com o app visível, 5.5 da spec anterior), e no iOS ela é o momento certo de ativar a sessão e de dizer ao piloto que o app assumiu o rádio. Nascer aqui evita inventá-la duas vezes.
+
+**O que não entra, e precisa continuar não entrando:** gravar em segundo plano — PTT com a tela apagada é outro problema, mais difícil, e é onde mora a armadilha do `microphone` no Android —, o Foreground Service e tudo que o cerca no Android, a isenção de bateria, a sobrevivência a fabricantes agressivos e o push para reconexão. Sem isso, a fatia é **escuta em segundo plano no iOS**, não "segundo plano pronto", e chamá-la de pronta seria mentir para a Fase 4.
+
+**Como se sabe que funcionou:** o critério não é a tela mostrar algo, é o celular no bolso. Com o app em voo e a tela apagada, uma fala publicada na sala toca no alto-falante; e depois de uma hora guardado, o aparelho ainda está na presença. O segundo é o que realmente testa, e é o que a Fase 4 chama de "deixar o celular no bolso por uma hora e ver o que morreu".
+
 ---
 
 ## 8. Critérios de conclusão
@@ -249,6 +265,7 @@ Módulos da Fase 2: `audio/`, `room/`, `history/`, `ui/`. Os módulos `ble/`, `b
 - Wi-Fi desligado em A durante a fala e religado dentro do `delivery_deadline`: a mensagem sobe, aparece em B como **atrasada** sem tocar, encaixada na posição em que foi gravada, e em A como **entregue atrasada**
 - Wi-Fi desligado em A além do `delivery_deadline`: a gravação fica como **não entregue**, e o piloto vê isso
 - Mudança de frequência em A aparece em B sem recarregar
+- iOS, app em voo e tela apagada: uma fala publicada na sala toca no alto-falante; e depois de uma hora no bolso o aparelho ainda está na presença (7.1)
 
 ---
 
