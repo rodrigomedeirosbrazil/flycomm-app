@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../audio/playback_queue.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
@@ -137,8 +139,28 @@ class RoomSession {
     }
   }
 
+  /// Ids sendo processados agora. O `exists` do banco não basta: o evento
+  /// `message.new` e o catch-up entregam a mesma mensagem quase junto, e os
+  /// dois passam pela checagem antes de qualquer um gravar.
+  ///
+  /// Medido no aparelho: a mesma fala entrou duas vezes com 132 ms de
+  /// diferença, baixando o áudio duas vezes e enfileirando duas reproduções da
+  /// mesma coisa — o oposto de "uma voz por vez".
+  final _ingesting = <String>{};
+
   Future<void> _ingest(RoomMessage message) async {
+    if (_ingesting.contains(message.id)) return;
     if (await history.exists(message.id)) return;
+
+    _ingesting.add(message.id);
+    try {
+      await _ingestFresh(message);
+    } finally {
+      _ingesting.remove(message.id);
+    }
+  }
+
+  Future<void> _ingestFresh(RoomMessage message) async {
 
     // A idade é a DA FALA, não a da chegada (spec 2.1): com entrega atrasada
     // permitida, `created_at` mede o tempo errado — uma fala de três minutos
@@ -149,6 +171,22 @@ class RoomSession {
     // O excedente da janela de catch-up não toca, mas preenche o histórico:
     // sem isso haveria um buraco sem nenhum indício de que algo aconteceu ali.
     final tooOld = clock.ageOf(spokenAt) > budgets.playbackDeadline;
+
+    // Só em debug: a decisão "toca ou não toca" depende de três coisas que não
+    // aparecem em lugar nenhum quando dão errado — o desvio do relógio, a
+    // idade calculada e o orçamento lido do servidor.
+    assert(() {
+      debugPrint(
+        '[flycomm] ingest ${message.id.substring(0, 8)} '
+        'falada=$spokenAt '
+        'agora=${clock.now()} '
+        'idade=${clock.ageOf(spokenAt).inMilliseconds}ms '
+        'prazo=${budgets.playbackDeadline.inMilliseconds}ms '
+        'sincronizado=${clock.isSynced} desvio=${clock.skew.inMilliseconds}ms '
+        'vencida=$tooOld',
+      );
+      return true;
+    }());
 
     await history.recordIncoming(
       message,

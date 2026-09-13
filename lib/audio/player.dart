@@ -23,13 +23,29 @@ class SegmentPlayer {
 
   /// Completa quando o segmento termina. A PlaybackQueue faz `await` nisto, e
   /// é esse await que mantém a fila serial.
+  ///
+  /// Não chame `stop()` aqui. No just_audio, `stop()` **libera os recursos
+  /// nativos** do decodificador, não é um "parar" simples: o player seguinte
+  /// encontra um ExoPlayer já liberado e a reprodução falha.
+  ///
+  /// Medido no aparelho: a primeira fala tocava (16000 quadros entregues a
+  /// 16 kHz, o segmento inteiro), vinha `ExoPlayerImpl: Release`, e da segunda
+  /// em diante tudo chegava como "atrasada" — porque a falha de reprodução é
+  /// marcada assim. O sintoma parecia de frescor e era de ciclo de vida do
+  /// player.
+  ///
+  /// O próximo `setFilePath` já troca a fonte; não há o que limpar entre falas.
   Future<void> play(String filePath) async {
     await _player.setFilePath(filePath);
     await _player.play();
-    await _player.stop();
   }
 
-  Future<void> interrupt() => _player.stop();
+  /// Interrompe o que estiver tocando — PTT acionado, ligação entrando.
+  ///
+  /// `pause()` e não `stop()`, pela mesma razão: interromper não deveria custar
+  /// o player. O item interrompido é descartado de qualquer forma, então a
+  /// posição não importa.
+  Future<void> interrupt() => _player.pause();
 
   Future<void> dispose() => _player.dispose();
 }
