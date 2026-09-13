@@ -75,7 +75,7 @@ class RoomSession {
   final _subscriptions = <StreamSubscription<dynamic>>[];
   final _roomChanges = StreamController<Room>.broadcast();
   final _gaps = StreamController<DateTime>.broadcast();
-  final _playbackProblems = StreamController<String>.broadcast();
+  final _playbackProblems = StreamController<String?>.broadcast();
 
   late Room _room;
 
@@ -85,8 +85,14 @@ class RoomSession {
   /// Emite quando o catch-up descobriu um buraco no histórico.
   Stream<DateTime> get gaps => _gaps.stream;
 
-  /// Emite quando uma fala não pôde ser tocada automaticamente.
-  Stream<String> get playbackProblems => _playbackProblems.stream;
+  /// Emite a razão quando uma fala não pôde ser tocada, e `null` quando volta
+  /// a funcionar.
+  ///
+  /// O `null` não é detalhe: o aviso fica na tela até ser dispensado, porque a
+  /// falha que mais importa acontece com o piloto longe do aparelho. Sem um
+  /// sinal de recuperação, ele continuaria mostrando um erro já resolvido — e
+  /// foi exatamente o que aconteceu em bancada.
+  Stream<String?> get playbackProblems => _playbackProblems.stream;
 
   Stream<List<LocalMessage>> get messages => history.watchRoom(room.id);
   Stream<RoomPresence> get presence => reverb.presence;
@@ -153,6 +159,7 @@ class RoomSession {
       final bytes = await messageApi.download(message.audioUrl);
       await audioStore.write(message.id, bytes);
       await history.setAudioPath(message.id, audioStore.pathFor(message.id));
+      _playbackProblems.add(null);
     } catch (error) {
       // O blob expirou, a rede caiu, ou a escrita em disco falhou. A linha fica
       // no histórico sem áudio: o piloto vê que algo foi dito e que não dá para
@@ -191,6 +198,7 @@ class RoomSession {
     try {
       await player.play(audioStore.pathFor(item.messageId));
       await history.markPlayed(item.messageId);
+      _playbackProblems.add(null);
     } catch (error) {
       await history.markLate(item.messageId);
       _playbackProblems.add('Não deu para tocar uma fala: $error');
