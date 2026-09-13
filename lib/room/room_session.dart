@@ -150,13 +150,50 @@ class RoomSession {
 
   Future<void> _ingest(RoomMessage message) async {
     if (_ingesting.contains(message.id)) return;
-    if (await history.exists(message.id)) return;
+
+    final known = await history.byId(message.id);
+
+    // Já conhecida e com áudio no disco: nada a fazer.
+    if (known != null && known.audioPath != null) return;
 
     _ingesting.add(message.id);
     try {
-      await _ingestFresh(message);
+      if (known == null) {
+        await _ingestFresh(message);
+      } else {
+        // Conhecida mas sem áudio: o download falhou antes — rede caindo, app
+        // indo para segundo plano no meio. Sem esta segunda chance a mensagem
+        // ficaria sem áudio para sempre, porque o `exists` barrava a
+        // reingestão e nada mais tentava. O catch-up reentrega a mesma
+        // mensagem a cada reconexão, e é essa reentrega que vira a
+        // oportunidade de recuperar o que faltou.
+        await _fetchAudio(message);
+      }
     } finally {
       _ingesting.remove(message.id);
+    }
+  }
+
+  /// Baixa e guarda o áudio. Devolve `true` quando o arquivo fica no disco.
+  Future<bool> _fetchAudio(RoomMessage message) async {
+    try {
+      final bytes = await messageApi.download(message.audioUrl);
+      await audioStore.write(message.id, bytes);
+      await history.setAudioPath(message.id, audioStore.pathFor(message.id));
+      _playbackProblems.add(null);
+      return true;
+    } catch (error) {
+      // O blob expirou, a rede caiu, ou a escrita em disco falhou. A linha fica
+      // no histórico sem áudio: o piloto vê que algo foi dito e que não dá para
+      // ouvir — e a próxima reentrega tenta de novo.
+      //
+      // O erro vai junto de propósito. A versão anterior fazia `catch (_)` e
+      // jogava a causa fora, e o sintoma que sobrava — "mensagem atrasada sem
+      // áudio" — é igual para blob vencido, rede ruim e disco recusando
+      // escrita, que são três problemas sem nada em comum.
+      await history.markLate(message.id);
+      _playbackProblems.add('Não deu para guardar o áudio recebido: $error');
+      return false;
     }
   }
 
@@ -193,24 +230,7 @@ class RoomSession {
       tooOld ? MessageState.late : MessageState.received,
     );
 
-    try {
-      final bytes = await messageApi.download(message.audioUrl);
-      await audioStore.write(message.id, bytes);
-      await history.setAudioPath(message.id, audioStore.pathFor(message.id));
-      _playbackProblems.add(null);
-    } catch (error) {
-      // O blob expirou, a rede caiu, ou a escrita em disco falhou. A linha fica
-      // no histórico sem áudio: o piloto vê que algo foi dito e que não dá para
-      // ouvir.
-      //
-      // O erro vai junto de propósito. A versão anterior fazia `catch (_)` e
-      // jogava a causa fora, e o sintoma que sobrava — "mensagem atrasada sem
-      // áudio" — é igual para blob vencido, rede ruim e disco recusando
-      // escrita, que são três problemas sem nada em comum.
-      await history.markLate(message.id);
-      _playbackProblems.add('Não deu para guardar o áudio recebido: $error');
-      return;
-    }
+    if (!await _fetchAudio(message)) return;
 
     if (!tooOld) {
       _queue.enqueue(
