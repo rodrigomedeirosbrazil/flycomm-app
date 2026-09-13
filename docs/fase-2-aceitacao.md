@@ -42,10 +42,26 @@ verdade seria preciso ou `created_at` com sub-segundo no servidor, ou instrument
 app para carimbar o instante em que a reprodução começa e comparar com `captured_at`
 pelo relógio do servidor. A segunda opção não depende de mudar o contrato.
 
-## 2. Fala de 12 s vira três mensagens — **pendente**
+## 2. Fala de 12 s vira três mensagens — **cumprido**
 
-A fala testada teve 2,6 s e virou um segmento só, o que é o comportamento correto
-para essa duração, mas não exercita o corte. Falta segurar o PTT por 12 s.
+Fala de ~14,5 s no iPhone, com contagem em voz alta.
+
+| index | `duration_ms` | `size_bytes` | `created_at` |
+|---|---|---|---|
+| 0 | 5000 | 160 044 | 18:25:29 |
+| 1 | 5000 | 160 044 | 18:25:34 |
+| 2 | 4484 | 143 552 | 18:25:38 |
+
+Mesmo `burst_id`, índices contíguos, total 14 484 ms. Os tamanhos fecham na régua de
+32 bytes/ms (160 044 = 44 de cabeçalho + 5000 × 32).
+
+Tocaram em ordem no simulador, e **a contagem saiu inteira, sem buraco nas junções** —
+confirmado de ouvido, que é o único jeito de confirmar isto. O corte foi no metadado e
+não no áudio.
+
+O que os carimbos mostram além do pedido: os três segmentos subiram com ~5 s de
+intervalo, **enquanto o piloto ainda falava**. O segmento 0 foi ao servidor aos 5 s do
+aperto, não no momento de soltar. A captura não parou para fechar segmento.
 
 ## 3. Modo avião em B por 20 s — **pendente**
 
