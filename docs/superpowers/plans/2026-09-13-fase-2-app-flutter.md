@@ -4662,7 +4662,10 @@ class _RoomScreenState extends State<RoomScreen> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             suffixText: 'MHz',
-            helperText: 'Vazio limpa. Quem sintoniza o rádio é você.',
+            hintText: '145,550',
+            helperText: 'Em MHz, como 145,550. Faixas: 136–174 e 400–470.\n'
+                'Vazio limpa. Quem sintoniza o rádio é você.',
+            helperMaxLines: 2,
           ),
         ),
         actions: [
@@ -4680,14 +4683,36 @@ class _RoomScreenState extends State<RoomScreen> {
 
     if (value == null || !mounted) return;
 
-    // Hz inteiro, nunca float: o arredondamento acontece aqui, uma vez.
-    final hz = value.isEmpty ? null : (double.tryParse(value)! * 1000000).round();
+    int? hz;
 
-    if (hz != null && !scope.config.isFrequencyValid(hz)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Fora das faixas do rádio (136–174 e 400–470 MHz).'),
-      ));
-      return;
+    if (value.isNotEmpty) {
+      // O teclado decimal do iOS usa o separador da localidade: em pt-BR vem
+      // vírgula, e double.tryParse só entende ponto. Sem esta troca, um
+      // `double.tryParse(value)!` derruba o app no primeiro piloto brasileiro
+      // que digitar 145,550 — nunca use `!` no que veio de um teclado.
+      final mhz = double.tryParse(value.replaceAll(',', '.'));
+
+      if (mhz == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não entendi o número. Use algo como 145,550.'),
+        ));
+        return;
+      }
+
+      // Hz inteiro, nunca float: o arredondamento acontece aqui, uma vez.
+      hz = (mhz * 1000000).round();
+
+      if (!scope.config.isFrequencyValid(hz)) {
+        // Repetir o que foi entendido evita o mal-entendido mais comum:
+        // digitar 146000 querendo dizer 146,000.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            'Entendi ${mhz.toStringAsFixed(3)} MHz, que está fora das faixas '
+            'do rádio (136–174 e 400–470 MHz).',
+          ),
+        ));
+        return;
+      }
     }
 
     await scope.rooms.update(
