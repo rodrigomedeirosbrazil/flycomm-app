@@ -30,6 +30,7 @@ class _RoomScreenState extends State<RoomScreen> {
   String? _error;
   bool _micGranted = false;
   bool _inFlight = false;
+  String? _lastProblem;
 
   @override
   void didChangeDependencies() {
@@ -64,10 +65,11 @@ class _RoomScreenState extends State<RoomScreen> {
       player: SegmentPlayer(),
     );
 
+    // Banner e não SnackBar: a falha que mais importa acontece com a tela
+    // apagada, e um aviso passageiro morre antes de alguém ver. Este fica até
+    // ser dispensado.
     session.playbackProblems.listen((problem) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(problem)));
+      if (mounted) setState(() => _lastProblem = problem);
     });
 
     session.gaps.listen((windowStart) {
@@ -245,6 +247,17 @@ class _RoomScreenState extends State<RoomScreen> {
       ),
       body: Column(
         children: [
+          if (_lastProblem != null)
+            MaterialBanner(
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              content: Text(_lastProblem!),
+              actions: [
+                TextButton(
+                  onPressed: () => setState(() => _lastProblem = null),
+                  child: const Text('Entendi'),
+                ),
+              ],
+            ),
           Expanded(
             child: StreamBuilder<List<LocalMessage>>(
               stream: session.messages,

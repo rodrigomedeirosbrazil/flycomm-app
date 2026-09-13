@@ -140,10 +140,17 @@ class RoomSession {
       final bytes = await messageApi.download(message.audioUrl);
       await audioStore.write(message.id, bytes);
       await history.setAudioPath(message.id, audioStore.pathFor(message.id));
-    } catch (_) {
-      // O blob expirou ou a rede caiu. A linha fica no histórico sem áudio:
-      // o piloto vê que algo foi dito e que não dá para ouvir.
+    } catch (error) {
+      // O blob expirou, a rede caiu, ou a escrita em disco falhou. A linha fica
+      // no histórico sem áudio: o piloto vê que algo foi dito e que não dá para
+      // ouvir.
+      //
+      // O erro vai junto de propósito. A versão anterior fazia `catch (_)` e
+      // jogava a causa fora, e o sintoma que sobrava — "mensagem atrasada sem
+      // áudio" — é igual para blob vencido, rede ruim e disco recusando
+      // escrita, que são três problemas sem nada em comum.
       await history.markLate(message.id);
+      _playbackProblems.add('Não deu para guardar o áudio recebido: $error');
       return;
     }
 
