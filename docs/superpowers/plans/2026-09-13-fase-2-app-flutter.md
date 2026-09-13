@@ -354,6 +354,19 @@ flutter pub get
 
 Esperado: `Got dependencies!` sem conflito de versão.
 
+> **O `APP_URL` do servidor precisa ser o IP da LAN, não `localhost`.** O
+> `audio_url` de cada mensagem é construído a partir dele. Com
+> `APP_URL=http://localhost:8000`, o aparelho recebe um link para *si mesmo* e o
+> download falha com **Connection refused** — enquanto no **simulador tudo
+> funciona**, porque ali `localhost` é o Mac. É a mesma classe de armadilha da
+> permissão de Rede Local: o simulador esconde o erro e só o aparelho o revela.
+>
+> Confira antes de testar no celular:
+>
+> ```bash
+> grep ^APP_URL ../flycomm-server/.env   # tem de ser o IP da LAN
+> ```
+
 - [ ] **Passo 2b: confirmar que o projeto compila de verdade**
 
 ```bash

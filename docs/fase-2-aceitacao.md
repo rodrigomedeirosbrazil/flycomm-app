@@ -209,3 +209,17 @@ e é a resposta que a Fase 3 precisa antes de desenhar a eleição de ponte.
 desencoraja, sendo motivo conhecido de recusa na App Store. Decisão registrada: o iOS
 não vai para a loja por ora; quando for, troca-se pelo framework PushToTalk, que a
 spec do sistema já previa como Fase 5.
+
+### Armadilhas que só o aparelho revela
+
+Três desta fase, todas invisíveis no simulador e todas com o mesmo formato — o
+simulador é generoso onde o iOS é estrito:
+
+| Armadilha | No simulador | No aparelho |
+|---|---|---|
+| `NSLocalNetworkUsageDescription` ausente | funciona | não alcança a LAN, sem pedir permissão |
+| `APP_URL=localhost` no servidor | funciona, porque `localhost` é o Mac | `audio_url` aponta para o próprio celular: Connection refused |
+| Conexão reaproveitada do pool | raro, app em primeiro plano | `ApiException(null): connection reused` ao voltar do segundo plano |
+
+A lição operacional: **o simulador não é evidência para nada que envolva rede ou
+ciclo de vida.** Serve para UI e lógica; o resto exige o aparelho.
