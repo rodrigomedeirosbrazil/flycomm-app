@@ -71,7 +71,7 @@ Observação lateral já obtida: ao entrar na sala às 15:20, os três segmentos
 vencido (`blob_ttl` de 5 min). Áudio velho não toca sozinho — a invariante da seção 2.1
 vale, ainda que por um caminho diferente do que o critério 3 pede.
 
-## 4. Wi-Fi desligado em A e religado dentro do `delivery_deadline` — **lado B verificado**
+## 4. Wi-Fi desligado em A e religado dentro do `delivery_deadline` — **cumprido**
 
 A spec foi revista (commit `a447aab` no `flycomm`): a mensagem vencida agora **sobe**,
 não toca em ninguém, aparece como **atrasada** e é encaixada onde foi **gravada**.
@@ -87,8 +87,25 @@ fala fresca e, **depois**, uma de 2 minutos atrás.
 A atrasada chegou depois e ficou embaixo: a ordenação é por `captured_at`, não por
 chegada. É o comportamento que a §2.1 descreve.
 
-Falta o lado A com aparelho de verdade: a mensagem gravada offline tem de aparecer no
-iPhone como **entregue atrasada**.
+Depois, com os dois aparelhos de verdade. O iPhone em modo avião gravou uma fala de
+2084 ms e insistiu até a rede voltar:
+
+| | |
+|---|---|
+| Falou (`captured_at`) | 19:50:48, em modo avião |
+| Chegou (`created_at`) | 19:51:50 |
+| **Atraso** | **62 s** |
+
+Sessenta e dois segundos. Sob o comportamento anterior a mensagem teria sido
+abandonada aos 30 s e ninguém saberia que o piloto falou.
+
+No simulador ela entrou como **atrasada**, sem tocar, e no **topo** da lista — porque
+foi a fala mais recente, embora tenha sido a última a chegar. Abaixo dela, uma fala de
+19:48:59 que chegou antes. A linha do tempo é da conversa, não do transporte.
+
+No iPhone, a linha ficou como **entregue atrasada**, confirmado pelo piloto: o estado
+que a §7 criou para dizer "entrou no registro dos outros, mas ninguém te ouviu ao
+vivo".
 
 ## 4b. Wi-Fi desligado além do `delivery_deadline` — **pendente**
 
