@@ -136,6 +136,33 @@ GET    /rooms/{id}/catchup   o que foi publicado na janela e eu não vi
 
 Sem prefixo: os caminhos são literalmente esses. Todos exigem token Sanctum, menos dois: `POST /auth/device`, que é onde o token nasce, e `GET /config`, que não carrega segredo nenhum e precisa ser legível antes do primeiro login — é dele que o app tira os orçamentos para decidir o que fazer com o que gravou offline.
 
+### 6.2.1 O que o cliente manda
+
+A resposta está descrita acima; a requisição também precisa estar, porque um campo obrigatório que o app descobre por um 422 é uma tarde perdida.
+
+| Rota | Campo | Regra |
+|---|---|---|
+| `POST /auth/device` | `identifier` | obrigatório, 16–128 caracteres |
+| | `secret` | obrigatório, 32–72 caracteres (o teto é o do bcrypt) |
+| | `display_name` | opcional; obrigatório na prática só na criação, ignorado na recuperação |
+| `PATCH /me` | `display_name` | obrigatório, 1–60 |
+| `POST /rooms` | `name` | obrigatório, 1–80 |
+| | `frequency_hz` | opcional, inteiro, dentro das faixas de `GET /config` |
+| `PATCH /rooms/{id}` | `name`, `frequency_hz` | ambos opcionais; enviar `frequency_hz: null` limpa a frequência |
+| `POST /rooms/join` | `invite_code` | obrigatório; aceito em minúscula, sem hífen e sem o prefixo `FLY` |
+| `POST /rooms/{id}/messages` | `id` | obrigatório, uuid **gerado pelo app** |
+| | `burst_id` | obrigatório, uuid |
+| | `index` | obrigatório, inteiro ≥ 0 |
+| | `duration_ms` | obrigatório, inteiro, teto em `segment_max_ms` |
+| | `origin` | obrigatório, `app` ou `radio` |
+| | `format` | obrigatório; `wav-pcm16-16k` na Fase 2 |
+| | `captured_at` | opcional, ISO 8601 |
+| | `audio` | obrigatório, arquivo, teto configurável (512 KB por padrão) |
+
+O upload é `multipart/form-data`; o resto é JSON. `duration_ms` ter o mesmo teto que `segment_max_ms` é o que faz a regra de 5 s ser do sistema e não só do app — um cliente que ignore a segmentação é recusado pelo servidor.
+
+**`origin` vem do cliente, e isso vira uma questão na Fase 3.** Hoje qualquer membro pode declarar `radio`, e não faz diferença: sem ponte, ninguém está injetando áudio do ar. Quando a eleição existir, só a ponte ativa deveria poder, e a autorização precisa ser revisitada junto com ela.
+
 Quatro detalhes do contrato que não são óbvios:
 
 **`POST /auth/device` recebe `{identifier, secret, display_name}`.** O `display_name` só é obrigatório na criação; numa recuperação ele é ignorado, porque o nome canônico vive no servidor e quem o muda é `PATCH /me`. O `secret` é guardado com bcrypt, o que impõe um teto de 72 bytes — acima disso o algoritmo trunca em silêncio e dois segredos diferentes viram o mesmo. Cada chamada emite um token novo e revoga o anterior daquele dispositivo.
