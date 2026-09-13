@@ -75,6 +75,7 @@ class RoomSession {
   final _subscriptions = <StreamSubscription<dynamic>>[];
   final _roomChanges = StreamController<Room>.broadcast();
   final _gaps = StreamController<DateTime>.broadcast();
+  final _playbackProblems = StreamController<String>.broadcast();
 
   late Room _room;
 
@@ -83,6 +84,9 @@ class RoomSession {
 
   /// Emite quando o catch-up descobriu um buraco no histórico.
   Stream<DateTime> get gaps => _gaps.stream;
+
+  /// Emite quando uma fala não pôde ser tocada automaticamente.
+  Stream<String> get playbackProblems => _playbackProblems.stream;
 
   Stream<List<LocalMessage>> get messages => history.watchRoom(room.id);
   Stream<RoomPresence> get presence => reverb.presence;
@@ -150,10 +154,27 @@ class RoomSession {
     }
   }
 
+  /// Nunca lança: uma exceção aqui subiria pela PlaybackQueue e mataria a
+  /// rodada em silêncio, levando a mensagem junto.
+  ///
+  /// Falhar sem dizer nada é o modo de falha mais caro que este app tem — foi
+  /// assim que uma fala tocada no alto-falante errado passou por "não tocou".
+  /// Quando não dá para tocar, a mensagem vira atrasada: continua ouvível por
+  /// toque, e o piloto vê que algo aconteceu.
   Future<void> _playFromStore(QueuedItem item) async {
-    if (!audioStore.has(item.messageId)) return;
-    await player.play(audioStore.pathFor(item.messageId));
-    await history.markPlayed(item.messageId);
+    if (!audioStore.has(item.messageId)) {
+      await history.markLate(item.messageId);
+      _playbackProblems.add('Uma fala chegou sem áudio e não tocou.');
+      return;
+    }
+
+    try {
+      await player.play(audioStore.pathFor(item.messageId));
+      await history.markPlayed(item.messageId);
+    } catch (error) {
+      await history.markLate(item.messageId);
+      _playbackProblems.add('Não deu para tocar uma fala: $error');
+    }
   }
 
   /// Reprodução por toque, do histórico. Entra na mesma fila e respeita o
@@ -228,5 +249,6 @@ class RoomSession {
     await player.dispose();
     await _roomChanges.close();
     await _gaps.close();
+    await _playbackProblems.close();
   }
 }

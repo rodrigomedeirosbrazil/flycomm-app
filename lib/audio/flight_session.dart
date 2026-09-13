@@ -8,6 +8,32 @@ import 'package:path_provider/path_provider.dart';
 
 import 'wav.dart';
 
+/// A sessão de áudio de um rádio.
+///
+/// `playAndRecord` porque o app faz as duas coisas, e trocar de categoria a
+/// cada PTT deixa a sessão num estado que ninguém devolve: o `record` muda para
+/// `playAndRecord` ao gravar e não volta, e a reprodução seguinte sai pelo
+/// alto-falante do ouvido. Foi assim que uma fala recebida com o celular no
+/// bolso ficou inaudível — não deixou de tocar, tocou no lugar errado.
+///
+/// `defaultToSpeaker` é o que corrige a rota; `allowBluetooth` deixa o fone do
+/// piloto funcionar; `spokenAudio` diz ao sistema que isto é voz e não música,
+/// o que muda como outros apps são abaixados.
+///
+/// É o que a seção 5.5 da spec do sistema já pedia: "uma AVAudioSession em
+/// playAndRecord mantida ativa".
+const radioSessionConfiguration = AudioSessionConfiguration(
+  avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+  avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+  avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+  androidAudioAttributes: AndroidAudioAttributes(
+    contentType: AndroidAudioContentType.speech,
+    usage: AndroidAudioUsage.media,
+  ),
+  androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+  androidWillPauseWhenDucked: true,
+);
+
 /// "Entrar em voo": a ação explícita que mantém o app ouvindo com a tela
 /// apagada.
 ///
@@ -52,7 +78,7 @@ class FlightSession {
     if (existing != null) return existing;
 
     final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.speech());
+    await session.configure(radioSessionConfiguration);
     _session = session;
 
     // Ligação entrando, ou outro app assumindo o áudio.

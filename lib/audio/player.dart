@@ -1,19 +1,17 @@
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
-/// Configura a sessão de áudio do sistema. Chamar uma vez, no arranque.
+import 'flight_session.dart';
+
+/// Configura a sessão de áudio no arranque, para que a reprodução funcione
+/// antes de o piloto entrar em voo.
 ///
-/// Sem isto, no iOS, a reprodução depois de uma gravação sai pelo alto-falante
-/// do ouvido em vez do de viva-voz: o `record` deixa a sessão em
-/// `playAndRecord` e o `just_audio` não define categoria nenhuma. O sintoma é
-/// enganoso — parece que não tocou, quando na verdade tocou baixinho no lugar
-/// errado.
-///
-/// `speech()` é o preset certo para rádio: voz, viva-voz por padrão, e cede a
-/// sessão para chamadas telefônicas.
+/// A configuração em si mora em [radioSessionConfiguration], fonte única: ter
+/// duas configurações diferentes em dois lugares foi como a reprodução acabou
+/// saindo pelo alto-falante do ouvido.
 Future<void> configureAudioSession() async {
   final session = await AudioSession.instance;
-  await session.configure(const AudioSessionConfiguration.speech());
+  await session.configure(radioSessionConfiguration);
 }
 
 /// Toca um arquivo por vez, do começo ao fim.

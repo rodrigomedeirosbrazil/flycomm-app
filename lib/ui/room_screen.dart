@@ -64,6 +64,12 @@ class _RoomScreenState extends State<RoomScreen> {
       player: SegmentPlayer(),
     );
 
+    session.playbackProblems.listen((problem) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(problem)));
+    });
+
     session.gaps.listen((windowStart) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
