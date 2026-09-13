@@ -163,7 +163,13 @@ seção 8 não é opcional.
 
 ---
 
-## 7.1 Escuta em segundo plano no iOS — **não se sustenta com este desenho**
+## 7.1 Escuta em segundo plano no iOS — **investigação (conclusão revista abaixo)**
+
+> A conclusão desta seção foi **superada** pela revisão no fim do documento: com
+> o `APP_URL` dos containers corrigido, a escuta em segundo plano funciona. A
+> investigação fica registrada inteira porque o caminho errado é a parte útil —
+> ele mostra como um defeito de configuração do servidor se disfarçou de limite
+> do iOS por horas.
 
 A fatia antecipada da Fase 4 (§7.1 da spec). Duas tentativas, e a primeira falhou de
 um jeito instrutivo.
@@ -259,3 +265,83 @@ como Fase 5 — agora com justificativa medida em vez de teórica. Ele exige ent
 
 **O silêncio em laço deveria sair.** Ele gasta bateria continuamente para entregar uma
 garantia que não existe, e deixá-lo no código convida alguém a confiar nele.
+
+---
+
+## 7.1 — revisão: com o `APP_URL` corrigido, a escuta em segundo plano funciona
+
+Data: 2026-09-13, 22:25 · confirmado de ouvido pelo piloto: **o som sai**.
+
+A conclusão acima foi escrita antes de a última armadilha ser encontrada. Entre
+ela e esta seção mudaram quatro coisas, e é honesto não saber qual pesou mais:
+
+1. **`APP_URL` assado nos containers.** O `compose.yaml` usa `env_file:`, que
+   injeta o ambiente **na criação** do container — `docker compose restart` não
+   relê. O `.env` corrigido só valia para o container `app`, recriado por
+   acidente; `queue` e `reverb` continuavam com `http://localhost:8000`. E o
+   evento `message.new` é serializado no **worker da fila**. Resultado: quem
+   recebia pelo WebSocket recebia uma `audio_url` apontando para o próprio
+   celular; quem recebia pelo catch-up (REST) recebia o IP certo. Isso explica
+   retroativamente o "funcionou uma vez e não se repetiu": não era o iOS
+   oscilando, era o caminho da entrega mudando.
+2. `just_audio`: `stop()` libera o decodificador nativo — a segunda fala em
+   diante falhava e virava "atrasada" (commit `b0612a4`).
+3. Ingest duplicado, quando evento e catch-up chegavam a 132 ms um do outro.
+4. Segunda chance para a mensagem cujo áudio falhou ao baixar (`7175248`).
+
+### O que o log do servidor mostra
+
+Um `GET /messages/{id}/audio` **sem `POST /broadcasting/auth` antes** significa
+que não houve reconexão: o WebSocket estava vivo e o `message.new` chegou ao
+vivo. Com `broadcasting/auth` + `catchup` no meio, o aparelho tinha caído e
+pegou a fala pelo catch-up.
+
+| Publicação | Download | Intervalo | Reconectou? |
+|---|---|---|---|
+| 22:25:11.665 | 22:25:12.047 | **382 ms** | não |
+| 22:25:29.031 | 22:25:34.855 | 5,8 s | **sim** (auth + catchup) |
+| 22:25:46.599 | 22:25:46.761 | **162 ms** | não |
+| 22:26:30.820 | 22:26:31.024 | **204 ms** | não |
+
+Três entregas ao vivo em quatro, a última depois de **44 s de conexão ociosa**.
+Entrega ao vivo em centenas de milissegundos, contra os 5,8 s do caminho por
+catch-up — a diferença entre um rádio e uma caixa de mensagens.
+
+### O que isto muda, e o que não muda
+
+**Muda:** o silêncio em laço **fica**. A recomendação anterior de removê-lo
+partia de que ele gastava bateria sem entregar garantia nenhuma; ele entrega.
+Sai quando o framework PushToTalk entrar (Fase 5), não antes.
+
+**Não muda:** a entrega não é de 100% — uma das quatro reconectou. Para um rádio
+isso ainda não é "resolvido", é "funciona na maior parte das vezes", e a
+diferença importa quando alguém precisa ser ouvido e não é.
+
+**Não muda:** o teste de uma hora com o celular no bolso continua por fazer. É
+ele que diz se o iOS sustenta ou derruba depois de um tempo, e é a resposta que
+a Fase 3 precisa antes de desenhar a eleição de ponte. Quatro entregas em 80
+segundos não respondem isso.
+
+**Não muda no Android:** nada disto vale lá. A escuta em segundo plano no
+Android depende de Foreground Service, que é Fase 4. A barra "Entrar em voo"
+aparece nas duas plataformas e só cumpre o que promete no iOS — decisão em
+aberto: escondê-la no Android, ou rotulá-la de outro jeito.
+
+### A lição de método
+
+O que resolveu foi **pôr o destino em toda mensagem de erro de rede**, uma
+mudança de uma linha em [`api_client.dart`](../lib/room/api_client.dart):
+
+```
+ApiException(null): Connection refused
+ApiException(null): Connection refused [http://localhost:8000/messages/.../audio]
+```
+
+A primeira forma me fez perseguir rede, sessão de áudio, ciclo de vida do app e
+ciclo de vida do player, por horas. A segunda respondeu na primeira tentativa.
+
+O mesmo princípio virou código: [`lib/room/trace.dart`](../lib/room/trace.dart)
+narra ingest → download → disco → fila → reprodução, só em debug. O sintoma
+"todas as mensagens chegam atrasadas e não tocam" teve **três causas diferentes**
+nesta sessão, e nenhuma delas era visível no log do servidor — ele é cego para
+tudo o que acontece dentro do app.

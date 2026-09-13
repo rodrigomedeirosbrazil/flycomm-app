@@ -99,7 +99,8 @@ class MessageApi {
       } on DioException catch (e) {
         final failure = ApiException(
           statusCode: e.response?.statusCode,
-          message: e.message ?? 'falha ao baixar o áudio',
+          message: '${e.message ?? 'falha ao baixar o áudio'} '
+              '[${e.requestOptions.uri}]',
         );
 
         // Erro com resposta é do servidor — 404 de blob vencido, 403 de quem

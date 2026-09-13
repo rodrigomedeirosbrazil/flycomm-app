@@ -69,11 +69,16 @@ class ApiClient {
     final response = e.response;
     final body = response?.data;
 
+    // O destino entra na mensagem sempre. "Connection refused" sem dizer para
+    // onde é meia informação: não distingue servidor fora do ar, URL montada
+    // errada e aparelho em outra rede — e os três aconteceram neste projeto.
+    final where = e.requestOptions.uri;
+
     if (body is Map<String, dynamic>) {
       final rawErrors = body['errors'];
       return ApiException(
         statusCode: response?.statusCode,
-        message: (body['message'] as String?) ?? e.message ?? 'Erro de rede',
+        message: '${(body['message'] as String?) ?? e.message ?? 'Erro de rede'} [$where]',
         errors: rawErrors is Map<String, dynamic>
             ? rawErrors.map(
                 (k, v) => MapEntry(k, (v as List<dynamic>).cast<String>()))
@@ -83,7 +88,7 @@ class ApiClient {
 
     return ApiException(
       statusCode: response?.statusCode,
-      message: e.message ?? 'Erro de rede',
+      message: '${e.message ?? 'Erro de rede'} [$where]',
     );
   }
 }

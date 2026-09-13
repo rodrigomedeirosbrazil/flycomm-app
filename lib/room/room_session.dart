@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import '../audio/playback_queue.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
@@ -15,6 +13,7 @@ import 'message_uploader.dart';
 import 'models.dart';
 import 'reverb_client.dart';
 import 'server_clock.dart';
+import 'trace.dart';
 
 /// Uma sessão de sala aberta: o WebSocket, a fila, o gravador e o histórico
 /// amarrados. Uma instância por sala aberta; `dispose` ao sair.
@@ -176,13 +175,17 @@ class RoomSession {
 
   /// Baixa e guarda o áudio. Devolve `true` quando o arquivo fica no disco.
   Future<bool> _fetchAudio(RoomMessage message) async {
+    final tag = message.id.substring(0, 8);
+    trace('baixando $tag');
     try {
       final bytes = await messageApi.download(message.audioUrl);
       await audioStore.write(message.id, bytes);
       await history.setAudioPath(message.id, audioStore.pathFor(message.id));
       _playbackProblems.add(null);
+      trace('guardado $tag');
       return true;
     } catch (error) {
+      trace('FALHOU baixar $tag: $error');
       // O blob expirou, a rede caiu, ou a escrita em disco falhou. A linha fica
       // no histórico sem áudio: o piloto vê que algo foi dito e que não dá para
       // ouvir — e a próxima reentrega tenta de novo.
@@ -212,18 +215,15 @@ class RoomSession {
     // Só em debug: a decisão "toca ou não toca" depende de três coisas que não
     // aparecem em lugar nenhum quando dão errado — o desvio do relógio, a
     // idade calculada e o orçamento lido do servidor.
-    assert(() {
-      debugPrint(
-        '[flycomm] ingest ${message.id.substring(0, 8)} '
-        'falada=$spokenAt '
-        'agora=${clock.now()} '
-        'idade=${clock.ageOf(spokenAt).inMilliseconds}ms '
-        'prazo=${budgets.playbackDeadline.inMilliseconds}ms '
-        'sincronizado=${clock.isSynced} desvio=${clock.skew.inMilliseconds}ms '
-        'vencida=$tooOld',
-      );
-      return true;
-    }());
+    trace(
+      'ingest ${message.id.substring(0, 8)} '
+      'falada=$spokenAt '
+      'agora=${clock.now()} '
+      'idade=${clock.ageOf(spokenAt).inMilliseconds}ms '
+      'prazo=${budgets.playbackDeadline.inMilliseconds}ms '
+      'sincronizado=${clock.isSynced} desvio=${clock.skew.inMilliseconds}ms '
+      'vencida=$tooOld',
+    );
 
     await history.recordIncoming(
       message,
@@ -247,6 +247,9 @@ class RoomSession {
   /// Quando não dá para tocar, a mensagem vira atrasada: continua ouvível por
   /// toque, e o piloto vê que algo aconteceu.
   Future<void> _playFromStore(QueuedItem item) async {
+    final tag = item.messageId.substring(0, 8);
+    trace('fila: vez de $tag, tem audio=${audioStore.has(item.messageId)}');
+
     if (!audioStore.has(item.messageId)) {
       await history.markLate(item.messageId);
       _playbackProblems.add('Uma fala chegou sem áudio e não tocou.');
@@ -254,10 +257,13 @@ class RoomSession {
     }
 
     try {
+      trace('tocando $tag');
       await player.play(audioStore.pathFor(item.messageId));
+      trace('terminou $tag');
       await history.markPlayed(item.messageId);
       _playbackProblems.add(null);
     } catch (error) {
+      trace('FALHOU tocar $tag: $error');
       await history.markLate(item.messageId);
       _playbackProblems.add('Não deu para tocar uma fala: $error');
     }

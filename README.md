@@ -16,10 +16,16 @@ Cópias verbatim; a origem é o `flycomm`. Ver [docs/specs/README.md](docs/specs
 
 ## Estado
 
-Fase 2 implementada e rodando em iPhone e simulador contra o backend real.
-Quatro dos seis critérios de conclusão da seção 8 da spec estão cumpridos — ver
-[docs/fase-2-aceitacao.md](docs/fase-2-aceitacao.md) para o que foi medido e o
-que falta.
+Fase 2 implementada e rodando em **iPhone, Android e simulador** contra o
+backend real. Quatro dos seis critérios de conclusão da seção 8 da spec estão
+cumpridos — ver [docs/fase-2-aceitacao.md](docs/fase-2-aceitacao.md) para o que
+foi medido e o que falta.
+
+A fatia antecipada da §7.1 — **escuta em segundo plano no iOS** — funciona: com
+a tela bloqueada o WebSocket sobrevive, a fala chega ao vivo em centenas de
+milissegundos e o som sai. Ela depende de um andaime (silêncio em laço) que sai
+quando o framework PushToTalk entrar, na Fase 5. **No Android isso não vale**:
+lá a escuta em segundo plano precisa de Foreground Service, que é Fase 4.
 
 O [plano de implementação](docs/superpowers/plans/2026-09-13-fase-2-app-flutter.md)
 é o documento mais útil para entender o porquê de cada decisão: ele carrega o

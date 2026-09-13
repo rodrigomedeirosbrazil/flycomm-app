@@ -53,7 +53,10 @@ const radioSessionConfiguration = AudioSessionConfiguration(
 /// ao piloto que o app assumiu o rádio.
 ///
 /// O que esta classe NÃO faz: gravar em segundo plano, e nada do lado Android.
-/// A fatia é escuta em segundo plano no iOS.
+/// A fatia é escuta em segundo plano no iOS. **No Android entrar em voo não
+/// entrega escuta em segundo plano** — isso exige Foreground Service, que é
+/// Fase 4. A barra aparece nas duas plataformas e só cumpre o que promete numa;
+/// decidir se esconde ou se rotula diferente está em aberto.
 class FlightSession {
   FlightSession({required Future<void> Function() onInterrupted})
       : _onInterrupted = onInterrupted;
@@ -107,7 +110,7 @@ class FlightSession {
     _changes.add(true);
   }
 
-  /// ANDAIME DE BANCADA — ler antes de mexer.
+  /// ANDAIME QUE SUSTENTA PESO — ler antes de mexer, e não remover.
   ///
   /// `UIBackgroundModes: audio` mantém o app vivo **enquanto ele está de fato
   /// produzindo áudio**. Uma sessão ativa mas silenciosa não segura nada: o iOS
@@ -118,11 +121,19 @@ class FlightSession {
   /// saiu da presença ao bloquear a tela, e a fala só chegou pelo catch-up ao
   /// desbloquear, já vencida.
   ///
-  /// Tocar silêncio em laço resolve, e é a técnica conhecida — mas é andaime,
-  /// não solução: gasta bateria continuamente e a Apple desencoraja, sendo
-  /// motivo conhecido de recusa na App Store. Existe para responder a pergunta
-  /// que a Fase 3 precisa: o WebSocket aguenta uma hora no bolso se o processo
-  /// ficar vivo?
+  /// Tocar silêncio em laço resolve, e é a técnica conhecida. **Medido no
+  /// aparelho, com a tela bloqueada:** três de quatro falas chegaram ao vivo em
+  /// 162–382 ms, a última depois de 44 s de conexão ociosa, e o som saiu. Sem
+  /// isto, a quarta seria a regra: reconexão e catch-up, 5,8 s, já vencida.
+  ///
+  /// Houve uma versão desta nota recomendando remover isto por "gastar bateria
+  /// sem entregar garantia". Estava errada, e pela razão de sempre: o que
+  /// derrubava a entrega era o `APP_URL` do servidor apontando para
+  /// `localhost`, não o iOS. Ver `docs/fase-2-aceitacao.md`, §7.1 revisada.
+  ///
+  /// Continua sendo andaime: gasta bateria continuamente e a Apple desencoraja,
+  /// sendo motivo conhecido de recusa na App Store. Sai quando o PushToTalk
+  /// entrar — não antes.
   ///
   /// O caminho sancionado é o framework PushToTalk (iOS 16+), que a spec do
   /// sistema já registrou como Fase 5: exige entitlement, conta paga e APNs.
