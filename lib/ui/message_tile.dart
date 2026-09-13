@@ -38,19 +38,21 @@ class MessageTile extends StatelessWidget {
         ? 'Você'
         : message.authorName ?? (message.origin == 'radio' ? 'Rádio' : 'sem nome');
 
+    final hasAudio = message.audioPath != null;
+
+    // A linha inteira toca, não só o ícone: a spec diz "ouvível por toque", e
+    // um alvo de 24 px é inoperável com luva, em voo.
     return ListTile(
+      onTap: onPlay,
       leading: Icon(icon, color: color),
       title: Text('$author · $seconds s'),
       subtitle: label.isEmpty
           ? Text('segmento ${message.segmentIndex + 1}')
           : Text(label, style: TextStyle(color: color)),
-      trailing: message.audioPath == null
-          ? const Icon(Icons.cloud_off)
-          : IconButton(
-              icon: const Icon(Icons.play_arrow),
-              onPressed: onPlay,
-              tooltip: 'Ouvir',
-            ),
+      trailing: Icon(
+        hasAudio ? Icons.play_arrow : Icons.cloud_off,
+        color: hasAudio ? null : colors.outline,
+      ),
     );
   }
 }

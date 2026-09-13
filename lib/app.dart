@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'audio/player.dart';
 import 'env.dart';
 import 'history/audio_store.dart';
 import 'history/database.dart';
@@ -65,6 +66,8 @@ class _BootstrapState extends State<_Bootstrap> {
   /// A ordem importa: GET /config antes de tudo, porque é dele que saem os
   /// orçamentos, e ele sincroniza o relógio de saída.
   Future<AppScope> _start() async {
+    await configureAudioSession();
+
     final api = ApiClient(baseUrl: Env.httpBase);
     final clock = ServerClock();
 

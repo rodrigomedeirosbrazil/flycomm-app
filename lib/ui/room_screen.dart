@@ -149,6 +149,17 @@ class _RoomScreenState extends State<RoomScreen> {
     // é assim que ela chega em todo mundo sem recarregar.
   }
 
+  /// Toca e, se não der, diz por quê. Silêncio sem explicação é
+  /// indistinguível de app quebrado.
+  Future<void> _play(RoomSession session, String messageId) async {
+    final problem = await session.playFromHistory(messageId);
+
+    if (problem == null || !mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(problem)));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -217,7 +228,7 @@ class _RoomScreenState extends State<RoomScreen> {
                     message: rows[index],
                     isMine: rows[index].direction == MessageDirection.outgoing ||
                         rows[index].authorId == scope.userId,
-                    onPlay: () => session.playFromHistory(rows[index].id),
+                    onPlay: () => _play(session, rows[index].id),
                   ),
                 );
               },

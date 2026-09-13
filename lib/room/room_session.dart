@@ -154,9 +154,23 @@ class RoomSession {
 
   /// Reprodução por toque, do histórico. Entra na mesma fila e respeita o
   /// meio-duplex, mas ignora o prazo: o piloto pediu para ouvir.
-  Future<void> playFromHistory(String messageId) async {
-    if (!audioStore.has(messageId)) return;
-    await player.play(audioStore.pathFor(messageId));
+  /// Devolve `null` quando tocou, ou a razão de não ter tocado.
+  ///
+  /// Devolver a razão em vez de engolir o erro é deliberado: uma mensagem que
+  /// não toca e não explica nada é indistinguível de um app quebrado, e o
+  /// piloto precisa saber se o áudio sumiu ou se o aparelho falhou.
+  Future<String?> playFromHistory(String messageId) async {
+    if (!audioStore.has(messageId)) {
+      return 'O áudio não está no aparelho: ele venceu no servidor antes de '
+          'dar tempo de baixar.';
+    }
+
+    try {
+      await player.play(audioStore.pathFor(messageId));
+      return null;
+    } catch (error) {
+      return 'Não deu para tocar: $error';
+    }
   }
 
   /// Meio-duplex: enquanto o PTT está acionado, nada toca.
