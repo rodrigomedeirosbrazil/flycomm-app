@@ -177,6 +177,10 @@ class RoomSession {
     }
   }
 
+  /// Para o que estiver tocando, sem mexer na fila. Usado quando o sistema
+  /// tira a sessão de áudio do app — ligação entrando, fone desconectado.
+  Future<void> stopPlayback() => player.interrupt();
+
   /// Meio-duplex: enquanto o PTT está acionado, nada toca.
   Future<void> pressPtt() async {
     _queue.pttHeld = true;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../audio/flight_session.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
 import '../history/database.dart';
@@ -25,8 +26,10 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> {
   RoomSession? _session;
+  FlightSession? _flight;
   String? _error;
   bool _micGranted = false;
+  bool _inFlight = false;
 
   @override
   void didChangeDependencies() {
@@ -72,10 +75,18 @@ class _RoomScreenState extends State<RoomScreen> {
       if (mounted) setState(() {});
     });
 
+    final flight = FlightSession(onInterrupted: session.stopPlayback);
+    flight.changes.listen((value) {
+      if (mounted) setState(() => _inFlight = value);
+    });
+
     try {
       await session.open();
       if (!mounted) return;
-      setState(() => _session = session);
+      setState(() {
+        _session = session;
+        _flight = flight;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
@@ -84,8 +95,23 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
+    _flight?.dispose();
     _session?.dispose();
     super.dispose();
+  }
+
+  /// Entrar em voo é explícito e feito com o app aberto (7.1 da spec): é o que
+  /// mantém a escuta viva com a tela apagada, e o que diz ao piloto que o app
+  /// assumiu o rádio.
+  Future<void> _toggleFlight() async {
+    final flight = _flight;
+    if (flight == null) return;
+
+    if (flight.isInFlight) {
+      await flight.leave();
+    } else {
+      await flight.enter();
+    }
   }
 
   Future<void> _editFrequency() async {
@@ -240,6 +266,7 @@ class _RoomScreenState extends State<RoomScreen> {
               padding: EdgeInsets.all(12),
               child: Text('Sem permissão de microfone: você só ouve.'),
             ),
+          _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
           Padding(
             padding: const EdgeInsets.all(16),
             child: PttButton(
@@ -270,5 +297,69 @@ class _FrequencyInput extends TextInputFormatter {
     final digits = next.text.replaceAll(RegExp('[^0-9]'), '');
 
     return digits.length > 6 ? previous : next;
+  }
+}
+
+/// O controle de entrar em voo.
+///
+/// Deliberadamente barulhento quando ligado: é o estado em que o app continua
+/// ouvindo com a tela apagada e consumindo bateria, e o piloto precisa saber
+/// que está nele. Um interruptor discreto seria pior, não melhor.
+class _FlightBar extends StatelessWidget {
+  const _FlightBar({required this.inFlight, required this.onToggle});
+
+  final bool inFlight;
+  final Future<void> Function() onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: inFlight ? colors.tertiaryContainer : colors.surfaceContainerHighest,
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                inFlight ? Icons.flight : Icons.flight_takeoff,
+                color: inFlight ? colors.onTertiaryContainer : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      inFlight ? 'EM VOO' : 'Entrar em voo',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: inFlight
+                            ? colors.onTertiaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      inFlight
+                          ? 'Continua ouvindo com a tela apagada'
+                          : 'Com a tela apagada, você para de receber',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: inFlight
+                            ? colors.onTertiaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(value: inFlight, onChanged: (_) => onToggle()),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
