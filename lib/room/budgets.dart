@@ -6,6 +6,7 @@ class Budgets {
   const Budgets({
     required this.playbackDeadline,
     required this.radioRelayDeadline,
+    required this.deliveryDeadline,
     required this.segmentMax,
     required this.catchupWindow,
     required this.blobTtl,
@@ -13,6 +14,12 @@ class Budgets {
 
   final Duration playbackDeadline;
   final Duration radioRelayDeadline;
+
+  /// Até quando o app insiste em subir antes de desistir de vez. É o teto que
+  /// impede a entrega atrasada de virar fila de saída persistente: sem ele o
+  /// app tentaria para sempre.
+  final Duration deliveryDeadline;
+
   final Duration segmentMax;
   final Duration catchupWindow;
   final Duration blobTtl;
@@ -20,6 +27,7 @@ class Budgets {
   factory Budgets.fromJson(Map<String, dynamic> json) => Budgets(
         playbackDeadline: Duration(milliseconds: json['playback_deadline_ms'] as int),
         radioRelayDeadline: Duration(milliseconds: json['radio_relay_deadline_ms'] as int),
+        deliveryDeadline: Duration(milliseconds: json['delivery_deadline_ms'] as int),
         segmentMax: Duration(milliseconds: json['segment_max_ms'] as int),
         catchupWindow: Duration(milliseconds: json['catchup_window_ms'] as int),
         blobTtl: Duration(milliseconds: json['blob_ttl_ms'] as int),

@@ -11,6 +11,7 @@ import 'room/catchup_repository.dart';
 import 'room/config_repository.dart';
 import 'room/device_identity.dart';
 import 'room/message_api.dart';
+import 'room/message_uploader.dart';
 import 'room/room_repository.dart';
 import 'room/server_clock.dart';
 import 'ui/app_scope.dart';
@@ -81,6 +82,8 @@ class _BootstrapState extends State<_Bootstrap> {
     );
 
     final db = HistoryDatabase();
+    final history = HistoryRepository(db);
+    final messageApi = MessageApi(api: api);
 
     return AppScope(
       api: api,
@@ -89,9 +92,15 @@ class _BootstrapState extends State<_Bootstrap> {
       auth: auth,
       rooms: RoomRepository(api: api),
       catchup: CatchupRepository(api: api, clock: clock),
-      messageApi: MessageApi(api: api),
-      history: HistoryRepository(db),
+      messageApi: messageApi,
+      history: history,
       audioStore: await AudioStore.open(),
+      uploader: MessageUploader(
+        clock: clock,
+        budgets: config.budgets,
+        history: history,
+        publish: messageApi.publish,
+      ),
       userId: user.id,
       child: DatabaseHolder(db: db, child: const _Shell()),
     );

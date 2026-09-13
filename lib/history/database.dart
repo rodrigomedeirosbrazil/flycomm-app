@@ -5,13 +5,20 @@ part 'database.g.dart';
 
 /// O ciclo de vida de uma mensagem no histórico local.
 ///
-/// Saída: gravada → enviando → entregue, ou → não entregue.
+/// Saída: gravada → enviando → entregue, → entregue atrasada, ou → não
+/// entregue.
 /// Entrada: recebida (tocada) ou atrasada (saiu da fila sem tocar, ouvível
 /// por toque, nunca automaticamente).
+///
+/// [deliveredLate] é o desfecho que a seção 2.1 da spec criou: a mensagem subiu
+/// depois do prazo, entrou no histórico dos outros e não tocou em ninguém. Para
+/// o piloto ela diz o mesmo que [undelivered] sobre o presente — ninguém te
+/// ouviu, use o rádio — e o contrário sobre o registro: esta ficou.
 enum MessageState {
   recorded,
   sending,
   delivered,
+  deliveredLate,
   undelivered,
   received,
   late,
@@ -37,11 +44,14 @@ class LocalMessages extends Table {
   TextColumn get format => text()();
   IntColumn get sizeBytes => integer().nullable()();
 
-  /// Do cliente, só para o histórico.
+  /// Do cliente: quando isto foi dito. É a idade da fala, e é por ela que o
+  /// app decide se toca (spec 2.1). Nulo só quando a origem é `radio`, que não
+  /// tem cliente para carimbar.
   DateTimeColumn get capturedAt => dateTime().nullable()();
 
-  /// Do servidor: a autoridade de frescor. Nulo enquanto a mensagem não foi
-  /// aceita — uma mensagem não entregue nunca teve um `created_at`.
+  /// Do servidor: quando isto chegou. Ordena o transporte e é o `since` do
+  /// catch-up. Nulo enquanto a mensagem não foi aceita — uma mensagem não
+  /// entregue nunca teve um `created_at`.
   DateTimeColumn get createdAt => dateTime().nullable()();
 
   TextColumn get direction => textEnum<MessageDirection>()();
@@ -50,7 +60,10 @@ class LocalMessages extends Table {
   /// Caminho do arquivo no dispositivo. Nulo enquanto o download não terminou.
   TextColumn get audioPath => text().nullable()();
 
-  /// Ordena o histórico mesmo quando createdAt é nulo.
+  /// A posição na linha do tempo: `capturedAt`, com queda para `createdAt`
+  /// quando ele não existe. É o que põe a mensagem atrasada onde ela foi
+  /// gravada em vez de no fim da lista — jogá-la no fim contaria uma história
+  /// errada sobre a ordem em que as coisas foram ditas.
   DateTimeColumn get recordedAt => dateTime()();
 
   @override

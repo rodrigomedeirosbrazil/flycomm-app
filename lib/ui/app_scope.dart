@@ -8,6 +8,7 @@ import '../room/auth_repository.dart';
 import '../room/budgets.dart';
 import '../room/catchup_repository.dart';
 import '../room/message_api.dart';
+import '../room/message_uploader.dart';
 import '../room/room_repository.dart';
 import '../room/server_clock.dart';
 
@@ -25,6 +26,7 @@ class AppScope extends InheritedWidget {
     required this.messageApi,
     required this.history,
     required this.audioStore,
+    required this.uploader,
     required this.userId,
     required super.child,
   });
@@ -38,6 +40,12 @@ class AppScope extends InheritedWidget {
   final MessageApi messageApi;
   final HistoryRepository history;
   final AudioStore audioStore;
+
+  /// Mora aqui, e não na sessão de sala, porque a insistência do upload dura
+  /// minutos e precisa atravessar o piloto sair da tela. Continua sendo fila em
+  /// memória, que morre com o processo: não é fila de saída persistente.
+  final MessageUploader uploader;
+
   final int userId;
 
   Budgets get budgets => config.budgets;

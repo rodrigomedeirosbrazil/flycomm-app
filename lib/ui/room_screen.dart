@@ -53,6 +53,7 @@ class _RoomScreenState extends State<RoomScreen> {
       messageApi: scope.messageApi,
       history: scope.history,
       audioStore: scope.audioStore,
+      uploader: scope.uploader,
       recorder: PttRecorder(
         segmentMax: scope.budgets.segmentMax,
         serverNow: scope.clock.now,

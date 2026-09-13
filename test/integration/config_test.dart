@@ -17,11 +17,16 @@ void main() {
     );
   });
 
-  test('GET /config devolve os cinco orçamentos e as duas faixas', () async {
+  test('GET /config devolve os seis orçamentos e as duas faixas', () async {
     final config = await repo.fetch();
 
     expect(config.budgets.segmentMax, const Duration(seconds: 5));
     expect(config.budgets.playbackDeadline.inMilliseconds, greaterThan(0));
+    expect(config.budgets.deliveryDeadline,
+        greaterThan(config.budgets.playbackDeadline),
+        reason: 'a janela de entrega é maior que o prazo de reprodução de '
+            'propósito: é nesse excedente que mora a mensagem que sobe '
+            'atrasada, entra no histórico e não toca (spec 2.1)');
     expect(config.budgets.catchupWindow, greaterThan(config.budgets.playbackDeadline),
         reason: 'a janela de catch-up é maior que o prazo de propósito: o '
             'excedente não toca, mas preenche o histórico (spec 2.1)');

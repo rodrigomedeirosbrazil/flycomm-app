@@ -28,6 +28,7 @@ void main() {
     required String burstId,
     int index = 0,
     int durationMs = 1000,
+    DateTime? capturedAt,
   }) =>
       OutgoingSegment(
         id: id,
@@ -35,7 +36,7 @@ void main() {
         burstId: burstId,
         index: index,
         durationMs: durationMs,
-        capturedAt: DateTime.now().toUtc(),
+        capturedAt: capturedAt ?? DateTime.now().toUtc(),
         wavBytes: tone(durationMs),
       );
 
@@ -115,6 +116,52 @@ void main() {
       throwsA(isA<ApiException>().having((e) => e.isValidation, 'isValidation', isTrue)),
       reason: 'a regra de 5 s é do sistema, não só do app: um cliente que '
           'ignore a segmentação é recusado pelo servidor',
+    );
+  });
+
+  test('a fala de dois minutos atrás ainda sobe: é ela que entra no histórico',
+      () async {
+    final capturedAt =
+        DateTime.now().toUtc().subtract(const Duration(minutes: 2));
+
+    final published = await messages.publish(
+      segment(id: uuid.v4(), burstId: uuid.v4(), capturedAt: capturedAt),
+    );
+
+    expect(published.capturedAt, isNotNull);
+    expect(published.createdAt.difference(published.capturedAt!),
+        greaterThan(const Duration(minutes: 1)),
+        reason: 'created_at responde quando chegou, captured_at quando foi '
+            'dito — e é a diferença entre os dois que diz que ninguém ouviu '
+            'ao vivo');
+  });
+
+  test('captured_at à frente do relógio do servidor é recusado com 422',
+      () async {
+    await expectLater(
+      messages.publish(segment(
+        id: uuid.v4(),
+        burstId: uuid.v4(),
+        capturedAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      )),
+      throwsA(isA<ApiException>()
+          .having((e) => e.isValidation, 'isValidation', isTrue)),
+      reason: 'um aparelho adiantado faria a fala nunca envelhecer e tocar ao '
+          'vivo horas depois',
+    );
+  });
+
+  test('captured_at fora da janela de entrega é recusado com 422', () async {
+    await expectLater(
+      messages.publish(segment(
+        id: uuid.v4(),
+        burstId: uuid.v4(),
+        capturedAt: DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
+      )),
+      throwsA(isA<ApiException>()
+          .having((e) => e.isValidation, 'isValidation', isTrue)),
+      reason: 'o app já não deveria estar insistindo nisso; o 422 é terminal '
+          'para ele e vira NÃO ENTREGUE',
     );
   });
 

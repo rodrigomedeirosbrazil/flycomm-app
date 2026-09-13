@@ -7,6 +7,7 @@ void main() {
   const budgets = Budgets(
     playbackDeadline: Duration(seconds: 30),
     radioRelayDeadline: Duration(seconds: 10),
+    deliveryDeadline: Duration(minutes: 5),
     segmentMax: Duration(seconds: 5),
     catchupWindow: Duration(seconds: 60),
     blobTtl: Duration(minutes: 5),
@@ -50,9 +51,11 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   }
 
+  /// A idade é a DA FALA: desde a 2.1 a entrega pode ser atrasada, e aí o
+  /// carimbo do servidor mede o tempo errado.
   QueuedItem itemAgedBy(String id, Duration age) => QueuedItem(
         messageId: id,
-        createdAt: clock.now().subtract(age),
+        spokenAt: clock.now().subtract(age),
       );
 
   setUp(() {

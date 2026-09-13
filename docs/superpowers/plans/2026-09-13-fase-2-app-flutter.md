@@ -108,6 +108,12 @@ insistir é gastar bateria e rádio por nada. Está isolado numa constante únic
 (`MessageUploader.validityWindow`) para trocar por `catchup_window_ms` numa linha, se
 a calibragem em campo mostrar que preencher o histórico dos outros vale o custo.
 
+> **Resolvido depois, por decisão de spec.** Preencher o histórico dos outros valia o
+> custo: a §2.1 foi invertida e a mensagem passou a subir mesmo depois de vencida, sem
+> tocar em ninguém. A janela virou um orçamento próprio, `delivery_deadline_ms` em
+> `GET /config`, e não mais uma constante do app. O frescor de reprodução passou a sair
+> de `captured_at`; `created_at` segue ordenando o transporte e o catch-up.
+
 ---
 
 ## 1. Estrutura de arquivos

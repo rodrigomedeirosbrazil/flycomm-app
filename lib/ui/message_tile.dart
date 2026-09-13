@@ -27,6 +27,14 @@ class MessageTile extends StatelessWidget {
       MessageState.recorded => ('gravada', colors.outline, Icons.fiber_manual_record),
       MessageState.sending => ('enviando…', colors.outline, Icons.upload),
       MessageState.delivered => ('entregue', colors.primary, Icons.check),
+      // Entrou no histórico dos outros, mas depois do prazo: ninguém ouviu ao
+      // vivo. Vai em cor de alerta porque a consequência prática é a mesma da
+      // não entregue — pegue o rádio.
+      MessageState.deliveredLate => (
+          'entregue atrasada — ninguém ouviu ao vivo',
+          colors.error,
+          Icons.running_with_errors,
+        ),
       MessageState.undelivered =>
         ('NÃO ENTREGUE — ninguém ouviu', colors.error, Icons.error_outline),
       MessageState.received => ('', colors.primary, Icons.volume_up),

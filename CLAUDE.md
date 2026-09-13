@@ -18,15 +18,28 @@ Se durante a implementação você concluir que o contrato da spec está errado,
 
 - **Uma voz por vez.** A fila de reprodução é FIFO estrito, nunca sobreposta.
   Enquanto o PTT está acionado, nada toca (meio-duplex).
-- **Áudio tem prazo.** Item mais velho que `playback_deadline` sai da fila
-  **sem tocar** e vira "atrasada" no histórico — ouvível por toque, nunca
-  automaticamente. Uma fila que só cresce é bug, não backlog.
+- **Áudio tem prazo.** Item cuja **fala** é mais velha que `playback_deadline`
+  sai da fila **sem tocar** e vira "atrasada" no histórico — ouvível por toque,
+  nunca automaticamente. Uma fila que só cresce é bug, não backlog.
+- **Dois relógios, duas perguntas.** `created_at` é do servidor e responde
+  "quando isto chegou": é o `since` do catch-up. `captured_at` responde "quando
+  isto foi dito": é a idade da fala, e é só ela que decide se toca. Com entrega
+  atrasada permitida (§2.1 da spec), `created_at` mede o tempo errado — uma fala
+  de três minutos atrás recebida agora tem `created_at` de agora.
 - **Frescor é contra o relógio do servidor.** Calcule o desvio a partir da
-  resposta HTTP e aplique. Nunca compare com o relógio local direto.
+  resposta HTTP e aplique — inclusive ao carimbar `captured_at` na gravação.
+  Nunca compare nem carimbe com o relógio local direto.
 - **Os orçamentos vêm de `GET /config`**, não de constantes no código.
-- **Não existe fila de saída persistente.** O upload tenta dentro da janela de
-  validade e desiste; a mensagem fica como **não entregue**, e o piloto precisa
-  ver isso — é a informação de que ninguém o ouviu.
+- **A mensagem sobe mesmo vencida, e não toca.** O upload insiste até
+  `delivery_deadline`, contado da captura. Entregue depois do prazo, ela entra
+  no histórico dos outros marcada como **atrasada**, encaixada onde foi
+  **gravada**, e vira **entregue atrasada** para quem falou. Passado o teto,
+  **não entregue** — e aí não existe mais fila: a de saída vive em memória, no
+  escopo do app, e morre com o processo. Nos dois casos o piloto precisa ver,
+  porque a informação é a mesma: ninguém te ouviu ao vivo.
+- **Fresco na frente.** Segmento que ainda cabe no `playback_deadline` passa na
+  frente do atrasado na fila de subida. O atrasado é trabalho de fundo: não
+  segura a conversa do presente para registrar o passado.
 - **Segmento de 5 s corta o metadado, nunca o áudio.** Ao fechar um segmento, a
   captura não para.
 - **Grava PCM uma vez.** A captura é PCM 16 kHz em stream, acumulada em

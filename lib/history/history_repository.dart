@@ -52,7 +52,10 @@ class HistoryRepository {
               createdAt: Value(message.createdAt.toUtc()),
               direction: MessageDirection.incoming,
               state: state,
-              recordedAt: message.createdAt.toUtc(),
+              // A posição é a da fala, não a da chegada: uma mensagem gravada
+              // às 12:00 e recebida às 12:03 pertence às 12:00. Origem `radio`
+              // não tem capturedAt, e aí a chegada é o melhor que existe.
+              recordedAt: (message.capturedAt ?? message.createdAt).toUtc(),
             ),
           );
 
@@ -65,12 +68,22 @@ class HistoryRepository {
   Future<void> markUndelivered(String id) =>
       _setState(id, MessageState.undelivered);
 
-  /// O servidor aceitou: agora a mensagem tem `created_at`, que é a autoridade
-  /// de frescor, e `size_bytes`, que o servidor mediu.
-  Future<void> markDelivered(String id, RoomMessage accepted) =>
+  /// O servidor aceitou: agora a mensagem tem `created_at`, que é quando ela
+  /// chegou, e `size_bytes`, que o servidor mediu.
+  ///
+  /// [wasLate] distingue os dois desfechos de sucesso. Ele não é derivado aqui
+  /// porque depende do `playbackDeadline`, e quem tem os orçamentos na mão é o
+  /// uploader.
+  Future<void> markDelivered(
+    String id,
+    RoomMessage accepted, {
+    bool wasLate = false,
+  }) =>
       (db.update(db.localMessages)..where((t) => t.id.equals(id))).write(
         LocalMessagesCompanion(
-          state: const Value(MessageState.delivered),
+          state: Value(
+            wasLate ? MessageState.deliveredLate : MessageState.delivered,
+          ),
           createdAt: Value(accepted.createdAt),
           sizeBytes: Value(accepted.sizeBytes),
           authorId: Value(accepted.authorId),

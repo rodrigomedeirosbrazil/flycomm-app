@@ -15,7 +15,14 @@ void main() {
 
   tearDown(() => db.close());
 
-  RoomMessage incoming(String id, {int index = 0, String burst = 'b-1'}) =>
+  RoomMessage incoming(
+    String id, {
+    int index = 0,
+    String burst = 'b-1',
+    DateTime? capturedAt,
+    DateTime? createdAt,
+    String origin = 'app',
+  }) =>
       RoomMessage(
         id: id,
         roomId: 255,
@@ -24,11 +31,13 @@ void main() {
         authorId: 510,
         authorName: 'Marina',
         durationMs: 5000,
-        origin: 'app',
+        origin: origin,
         format: 'wav-pcm16-16k',
         sizeBytes: 160044,
-        capturedAt: DateTime.utc(2026, 9, 13, 16),
-        createdAt: DateTime.utc(2026, 9, 13, 16, 0, 1),
+        capturedAt: origin == 'radio'
+            ? null
+            : capturedAt ?? DateTime.utc(2026, 9, 13, 16),
+        createdAt: createdAt ?? DateTime.utc(2026, 9, 13, 16, 0, 1),
         expiresAt: DateTime.utc(2026, 9, 13, 16, 5, 1),
         audioUrl: 'http://servidor/messages/$id/audio',
       );
@@ -101,11 +110,76 @@ void main() {
         reason: 'os três segmentos de uma fala de 12 s aparecem em ordem');
   });
 
+  test('o sucesso depois do prazo é entregue atrasada, não entregue', () async {
+    await history.recordOutgoing(
+      id: 'out-3',
+      roomId: 255,
+      burstId: 'b-out',
+      index: 0,
+      durationMs: 5000,
+      format: 'wav-pcm16-16k',
+      capturedAt: DateTime.utc(2026, 9, 13, 16),
+      audioPath: '/tmp/out-3.wav',
+    );
+
+    await history.markDelivered('out-3', incoming('out-3'), wasLate: true);
+
+    final row = (await history.byId('out-3'))!;
+    expect(row.state, MessageState.deliveredLate,
+        reason: 'ficou no registro dos outros, mas ninguém ouviu ao vivo');
+    expect(row.createdAt, isNotNull);
+  });
+
+  test('a mensagem atrasada entra onde foi gravada, não onde chegou', () async {
+    // Duas falas: uma às 16:00 que só chegou às 16:03, e uma às 16:01 que
+    // chegou na hora. A ordem da conversa é 16:00 e depois 16:01.
+    await history.recordIncoming(
+      incoming(
+        'atrasada',
+        capturedAt: DateTime.utc(2026, 9, 13, 16, 0, 0),
+        createdAt: DateTime.utc(2026, 9, 13, 16, 3, 0),
+      ),
+      MessageState.late,
+    );
+    await history.recordIncoming(
+      incoming(
+        'na-hora',
+        burst: 'b-2',
+        capturedAt: DateTime.utc(2026, 9, 13, 16, 1, 0),
+        createdAt: DateTime.utc(2026, 9, 13, 16, 1, 0),
+      ),
+      MessageState.received,
+    );
+
+    final rows = await history.forRoom(255);
+
+    expect(rows.map((r) => r.id), ['atrasada', 'na-hora'],
+        reason: 'ordenar pela chegada contaria uma história errada sobre a '
+            'ordem em que as coisas foram ditas');
+  });
+
+  test('origem rádio, sem captured_at, se posiciona pela chegada', () async {
+    await history.recordIncoming(
+      incoming(
+        'do-radio',
+        origin: 'radio',
+        createdAt: DateTime.utc(2026, 9, 13, 16, 2, 0),
+      ),
+      MessageState.received,
+    );
+
+    final row = (await history.byId('do-radio'))!;
+    expect(row.capturedAt, isNull, reason: 'não há cliente ali para carimbar');
+    expect(row.recordedAt.toUtc(), DateTime.utc(2026, 9, 13, 16, 2, 0));
+  });
+
   test('a última mensagem vista é o since do catch-up', () async {
     expect(await history.lastSeenAt(255), isNull);
 
     await history.recordIncoming(incoming('t-1'), MessageState.received);
 
-    expect(await history.lastSeenAt(255), DateTime.utc(2026, 9, 13, 16, 0, 1));
+    expect(await history.lastSeenAt(255), DateTime.utc(2026, 9, 13, 16, 0, 1),
+        reason: 'o since é carimbo do servidor, não a idade da fala: o '
+            'transporte continua ordenado por createdAt');
   });
 }

@@ -7,6 +7,7 @@ void main() {
     'budgets': {
       'playback_deadline_ms': 30000,
       'radio_relay_deadline_ms': 10000,
+      'delivery_deadline_ms': 300000,
       'segment_max_ms': 5000,
       'catchup_window_ms': 60000,
       'blob_ttl_ms': 300000,
@@ -18,11 +19,12 @@ void main() {
     'server_time': '2026-09-13T16:02:13.690074Z',
   };
 
-  test('lê os cinco orçamentos como Duration', () {
+  test('lê os seis orçamentos como Duration', () {
     final config = ServerConfig.fromJson(payload);
 
     expect(config.budgets.playbackDeadline, const Duration(seconds: 30));
     expect(config.budgets.radioRelayDeadline, const Duration(seconds: 10));
+    expect(config.budgets.deliveryDeadline, const Duration(minutes: 5));
     expect(config.budgets.segmentMax, const Duration(seconds: 5));
     expect(config.budgets.catchupWindow, const Duration(seconds: 60));
     expect(config.budgets.blobTtl, const Duration(minutes: 5));

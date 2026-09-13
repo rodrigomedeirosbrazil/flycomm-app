@@ -5,12 +5,18 @@ import '../room/budgets.dart';
 import '../room/server_clock.dart';
 
 class QueuedItem {
-  const QueuedItem({required this.messageId, required this.createdAt});
+  const QueuedItem({required this.messageId, required this.spokenAt});
 
   final String messageId;
 
-  /// A autoridade de frescor: o carimbo do servidor, nunca o do celular.
-  final DateTime createdAt;
+  /// Quando isto foi dito — a idade da fala, não a da chegada.
+  ///
+  /// É o `captured_at` da mensagem, com queda para o `created_at` quando ele
+  /// não existe (origem `radio`). Desde a seção 2.1 da spec a entrega pode ser
+  /// atrasada, e aí o carimbo do servidor mede o tempo errado: uma fala de três
+  /// minutos atrás recebida agora tem `created_at` de agora, e tocaria como se
+  /// fosse nova.
+  final DateTime spokenAt;
 }
 
 /// O app se comporta como um rádio: uma voz por vez, nunca sobreposta, em
@@ -20,6 +26,7 @@ class QueuedItem {
 ///
 /// - o prazo é verificado no momento de desenfileirar, não de enfileirar: se a
 ///   fila tem oito mensagens, a cauda já venceu antes de chegar a vez
+/// - o prazo corre contra a idade DA FALA, não a da chegada (2.1)
 /// - item vencido sai SEM tocar e é anunciado em [dropped], para virar
 ///   "atrasada" no histórico — ouvível por toque, nunca automaticamente
 /// - enquanto [pttHeld], nada toca: meio-duplex
@@ -72,7 +79,7 @@ class PlaybackQueue {
     while (_items.isNotEmpty && !_pttHeld) {
       final item = _items.removeFirst();
 
-      if (clock.ageOf(item.createdAt) > budgets.playbackDeadline) {
+      if (clock.ageOf(item.spokenAt) > budgets.playbackDeadline) {
         _dropped.add(item);
         continue;
       }

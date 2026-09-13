@@ -26,6 +26,7 @@ class RoomSession {
     required this.messageApi,
     required this.history,
     required this.audioStore,
+    required this.uploader,
     required this.recorder,
     required this.player,
   }) {
@@ -33,13 +34,6 @@ class RoomSession {
       clock: clock,
       budgets: budgets,
       play: _playFromStore,
-    );
-
-    _uploader = MessageUploader(
-      clock: clock,
-      budgets: budgets,
-      history: history,
-      publish: messageApi.publish,
     );
 
     // Item que passou do prazo sai da fila sem tocar e vira "atrasada" no
@@ -68,11 +62,15 @@ class RoomSession {
   final MessageApi messageApi;
   final HistoryRepository history;
   final AudioStore audioStore;
+
+  /// Vem de fora e não é descartado aqui: a insistência dura minutos e precisa
+  /// sobreviver ao piloto sair da tela da sala. Ver [MessageUploader].
+  final MessageUploader uploader;
+
   final PttRecorder recorder;
   final SegmentPlayer player;
 
   late final PlaybackQueue _queue;
-  late final MessageUploader _uploader;
 
   final _subscriptions = <StreamSubscription<dynamic>>[];
   final _roomChanges = StreamController<Room>.broadcast();
@@ -119,9 +117,15 @@ class RoomSession {
   Future<void> ingest(RoomMessage message) async {
     if (await history.exists(message.id)) return;
 
+    // A idade é a DA FALA, não a da chegada (spec 2.1): com entrega atrasada
+    // permitida, `created_at` mede o tempo errado — uma fala de três minutos
+    // atrás recebida agora tem `created_at` de agora e tocaria como se fosse
+    // nova. Origem `radio` não tem `captured_at`, e aí a chegada é o que há.
+    final spokenAt = message.capturedAt ?? message.createdAt;
+
     // O excedente da janela de catch-up não toca, mas preenche o histórico:
     // sem isso haveria um buraco sem nenhum indício de que algo aconteceu ali.
-    final tooOld = clock.ageOf(message.createdAt) > budgets.playbackDeadline;
+    final tooOld = clock.ageOf(spokenAt) > budgets.playbackDeadline;
 
     await history.recordIncoming(
       message,
@@ -141,7 +145,7 @@ class RoomSession {
 
     if (!tooOld) {
       _queue.enqueue(
-        QueuedItem(messageId: message.id, createdAt: message.createdAt),
+        QueuedItem(messageId: message.id, spokenAt: spokenAt),
       );
     }
   }
@@ -199,7 +203,7 @@ class RoomSession {
       audioPath: path,
     );
 
-    await _uploader.upload(OutgoingSegment(
+    await uploader.upload(OutgoingSegment(
       id: segment.id,
       roomId: room.id,
       burstId: segment.burstId,
