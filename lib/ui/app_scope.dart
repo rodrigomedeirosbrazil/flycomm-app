@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../audio/media_buttons.dart';
 import '../history/audio_store.dart';
 import '../history/database.dart';
 import '../history/history_repository.dart';
@@ -26,6 +27,7 @@ class AppScope extends InheritedWidget {
     required this.messageApi,
     required this.history,
     required this.audioStore,
+    required this.mediaButtons,
     required this.uploader,
     required this.userId,
     required super.child,
@@ -40,6 +42,10 @@ class AppScope extends InheritedWidget {
   final MessageApi messageApi;
   final HistoryRepository history;
   final AudioStore audioStore;
+
+  /// Quem recebe o gesto do fone. Nulo fora do iPhone, e a tela precisa
+  /// aguentar isso — no Android não há sessão de mídia nesta fatia.
+  final MediaButtonHandler? mediaButtons;
 
   /// Mora aqui, e não na sessão de sala, porque a insistência do upload dura
   /// minutos e precisa atravessar o piloto sair da tela. Continua sendo fila em

@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../audio/cues.dart';
 import '../audio/flight_session.dart';
+import '../audio/gesture_ptt.dart';
+import '../audio/media_buttons.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
 import '../history/database.dart';
@@ -11,6 +16,7 @@ import '../room/reverb_client.dart';
 import '../room/room_session.dart';
 import '../env.dart';
 import 'app_scope.dart';
+import 'media_button_log.dart';
 import 'message_tile.dart';
 import 'ptt_button.dart';
 import 'rooms_screen.dart';
@@ -27,9 +33,13 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> {
   RoomSession? _session;
   FlightSession? _flight;
+  GesturePtt? _gesture;
+  ToneCues? _cues;
+  StreamSubscription<MediaCommand>? _commands;
   String? _error;
   bool _micGranted = false;
   bool _inFlight = false;
+  bool _gestureOpen = false;
   String? _lastProblem;
 
   @override
@@ -42,6 +52,10 @@ class _RoomScreenState extends State<RoomScreen> {
     final scope = AppScope.of(context);
 
     _micGranted = await Permission.microphone.request().isGranted;
+
+    // Preparado agora, e não no primeiro PTT: montar o tom custa dezenas de
+    // milissegundos, e pagá-los no aperto atrasaria o aviso de "pode falar".
+    final cues = ToneCues()..prepare();
 
     final session = RoomSession(
       room: widget.room,
@@ -63,7 +77,10 @@ class _RoomScreenState extends State<RoomScreen> {
         serverNow: scope.clock.now,
       ),
       player: SegmentPlayer(),
+      cues: cues,
     );
+
+    _cues = cues;
 
     // Banner e não SnackBar: a falha que mais importa acontece com a tela
     // apagada, e um aviso passageiro morre antes de alguém ver. Este fica até
@@ -88,6 +105,8 @@ class _RoomScreenState extends State<RoomScreen> {
       if (mounted) setState(() => _inFlight = value);
     });
 
+    _listenToTheHeadset(scope, session);
+
     try {
       await session.open();
       if (!mounted) return;
@@ -101,8 +120,50 @@ class _RoomScreenState extends State<RoomScreen> {
     }
   }
 
+  /// O gesto no fone aciona o **mesmo** PTT do botão da tela: segmentador,
+  /// upload, histórico, tudo igual. Nada de caminho paralelo — um caminho
+  /// paralelo provaria que o gesto chega, e não que a mensagem sai.
+  void _listenToTheHeadset(AppScope scope, RoomSession session) {
+    final buttons = scope.mediaButtons;
+    if (buttons == null) return;
+
+    final gesture = GesturePtt(
+      start: session.pressPtt,
+      stop: session.releasePtt,
+      // Do servidor, não daqui: é o mesmo teto que corta o segmento.
+      ceiling: scope.budgets.segmentMax,
+    );
+    gesture.changes.listen((open) {
+      if (mounted) setState(() => _gestureOpen = open);
+    });
+
+    _commands = buttons.commands.listen((_) {
+      // setState mesmo quando o gesto não vira gravação: o diagnóstico precisa
+      // mostrar o comando que o antirrebote engoliu. É justamente ele que
+      // distingue "o fone manda dois" de "eu toquei duas vezes".
+      if (mounted) setState(() {});
+      if (_micGranted) unawaited(gesture.handle());
+    });
+
+    _gesture = gesture;
+  }
+
+  void _showMediaButtonLog() {
+    final buttons = AppScope.of(context).mediaButtons;
+    final cues = _cues;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => MediaButtonLog(handler: buttons, cues: cues),
+    );
+  }
+
   @override
   void dispose() {
+    _commands?.cancel();
+    _gesture?.dispose();
+    _cues?.dispose();
     _flight?.dispose();
     _session?.dispose();
     super.dispose();
@@ -226,6 +287,11 @@ class _RoomScreenState extends State<RoomScreen> {
       appBar: AppBar(
         title: Text(session.current.name),
         actions: [
+          IconButton(
+            onPressed: _showMediaButtonLog,
+            icon: const Icon(Icons.headset_mic_outlined),
+            tooltip: 'Comandos de mídia recebidos',
+          ),
           TextButton.icon(
             onPressed: _editFrequency,
             icon: const Icon(Icons.radio),
@@ -298,6 +364,7 @@ class _RoomScreenState extends State<RoomScreen> {
               padding: EdgeInsets.all(12),
               child: Text('Sem permissão de microfone: você só ouve.'),
             ),
+          if (_gestureOpen) const _GestureBar(),
           _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -391,6 +458,42 @@ class _FlightBar extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// O microfone foi aberto pelo fone, não pelo dedo.
+///
+/// Precisa existir porque o botão da tela não muda de cor nesse caso: quem
+/// está gravando é outro caminho, e sem este aviso o piloto fala achando que
+/// não está gravando, ou pior, não fala achando que está.
+class _GestureBar extends StatelessWidget {
+  const _GestureBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      color: colors.error,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.headset_mic, color: colors.onError, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'GRAVANDO PELO GESTO — fecha em 5 s, ou no próximo toque',
+              style: TextStyle(
+                color: colors.onError,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

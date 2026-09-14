@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
@@ -60,12 +61,47 @@ class PttRecorder {
 
   Future<bool> hasPermission() => _recorder.hasPermission();
 
+  bool _sessionHandedOver = false;
+
+  /// Tira a `AVAudioSession` das mãos do `record`.
+  ///
+  /// Por padrão o pacote chama `setCategory(.playAndRecord, options:
+  /// [defaultToSpeaker, allowBluetooth, allowBluetoothA2DP])` a **cada**
+  /// gravação, e nunca desfaz. São as opções padrão do `IosRecordConfig`, e o
+  /// `allowBluetooth` delas é justamente o que mata o `MPRemoteCommandCenter`:
+  /// depois do primeiro PTT, o gesto do fone parava de chegar para sempre.
+  ///
+  /// Não é uma opção de configuração da gravação, é uma segunda configuração
+  /// de sessão competindo com a nossa — o mesmo defeito que a nota de
+  /// `radioSessionConfiguration` descreve, uma camada mais fundo. Com isto, a
+  /// sessão volta a ter dono único.
+  ///
+  /// Tem uma consequência que é fácil não ver: junto com a categoria, o
+  /// `record` também parou de **ativar** a sessão — e gravar numa sessão
+  /// inativa não grava, em silêncio. Por isso [start] ativa explicitamente.
+  ///
+  /// Só iOS: `record.ios` é nulo nas outras plataformas, e no Android nada
+  /// disto se aplica — lá quem manda na sessão é o foco de áudio.
+  Future<void> _handOverSession() async {
+    if (_sessionHandedOver) return;
+    _sessionHandedOver = true;
+
+    await _recorder.ios?.manageAudioSession(false);
+  }
+
   /// O piloto segurou o PTT.
   Future<void> start() async {
     if (_recording) return;
     if (!await _recorder.hasPermission()) {
       throw StateError('sem permissão de microfone');
     }
+
+    await _handOverSession();
+
+    // O interruptor que o `record` acionava antes, e que ninguém mais aciona
+    // fora de voo. Isto não é um segundo dono da sessão: a configuração
+    // continua saindo de `radioSessionConfiguration`, e ativar é idempotente.
+    await (await AudioSession.instance).setActive(true);
 
     _burstId = _uuid.v4();
     _index = 0;

@@ -16,17 +16,34 @@ import 'wav.dart';
 /// alto-falante do ouvido. Foi assim que uma fala recebida com o celular no
 /// bolso ficou inaudível — não deixou de tocar, tocou no lugar errado.
 ///
-/// `defaultToSpeaker` é o que corrige a rota; `allowBluetooth` deixa o fone do
-/// piloto funcionar; `spokenAudio` diz ao sistema que isto é voz e não música,
-/// o que muda como outros apps são abaixados.
+/// `defaultToSpeaker` é o que corrige a rota quando não há fone;
+/// `spokenAudio` diz ao sistema que isto é voz e não música, o que muda como
+/// outros apps são abaixados.
+///
+/// **`allowBluetoothA2dp` sim, `allowBluetooth` não — e a escolha é dolorosa.**
+/// No iPhone dá para ter o microfone do fone ou os botões dele, nunca os dois:
+/// com `allowBluetooth` (HFP) a captura vem do fone e o
+/// `MPRemoteCommandCenter` **para de receber**, então nenhum gesto chega
+/// (reproduzido e sem resposta da Apple no fórum 688838). Com A2DP só, o gesto
+/// chega, o som sai no fone, e a captura volta para o microfone do iPhone.
+///
+/// Enquanto o gesto for a forma de acionar o PTT, é A2DP. Trocar de perfil
+/// durante a gravação é possível e é a saída a prazo, mas cobra o seu preço:
+/// sob HFP o botão morre, então o gesto não consegue **encerrar** a fala.
+///
+/// Isto só vale se ninguém mais mexer na sessão. Ver `PttRecorder`, que
+/// chamava `setCategory` por conta própria a cada PTT — com
+/// `[defaultToSpeaker, allowBluetooth, allowBluetoothA2DP]`, o padrão do
+/// `IosRecordConfig` — e deixava assim para sempre.
 ///
 /// É o que a seção 5.5 da spec do sistema já pedia: "uma AVAudioSession em
 /// playAndRecord mantida ativa".
-const radioSessionConfiguration = AudioSessionConfiguration(
+final radioSessionConfiguration = AudioSessionConfiguration(
   avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-  avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+  avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker |
+      AVAudioSessionCategoryOptions.allowBluetoothA2dp,
   avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-  androidAudioAttributes: AndroidAudioAttributes(
+  androidAudioAttributes: const AndroidAudioAttributes(
     contentType: AndroidAudioContentType.speech,
     usage: AndroidAudioUsage.media,
   ),

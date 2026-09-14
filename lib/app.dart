@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'audio/media_buttons.dart';
 import 'audio/player.dart';
 import 'env.dart';
 import 'history/audio_store.dart';
@@ -23,12 +24,15 @@ final _theme = ThemeData(
 );
 
 class FlycommApp extends StatelessWidget {
-  const FlycommApp({super.key});
+  const FlycommApp({super.key, required this.mediaButtons});
+
+  /// A sessão de mídia, montada no `main` antes de tudo. Nula fora do iPhone.
+  final MediaButtonHandler? mediaButtons;
 
   // Sem MaterialApp aqui: ele precisa ficar ABAIXO do AppScope, senão as telas
   // empurradas no Navigator não enxergam o escopo (ver _Shell).
   @override
-  Widget build(BuildContext context) => const _Bootstrap();
+  Widget build(BuildContext context) => _Bootstrap(mediaButtons: mediaButtons);
 }
 
 /// O MaterialApp propriamente dito, montado dentro do AppScope.
@@ -49,7 +53,9 @@ class _Shell extends StatelessWidget {
 }
 
 class _Bootstrap extends StatefulWidget {
-  const _Bootstrap();
+  const _Bootstrap({required this.mediaButtons});
+
+  final MediaButtonHandler? mediaButtons;
 
   @override
   State<_Bootstrap> createState() => _BootstrapState();
@@ -95,6 +101,7 @@ class _BootstrapState extends State<_Bootstrap> {
       messageApi: messageApi,
       history: history,
       audioStore: await AudioStore.open(),
+      mediaButtons: widget.mediaButtons,
       uploader: MessageUploader(
         clock: clock,
         budgets: config.budgets,

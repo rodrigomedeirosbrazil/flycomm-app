@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../audio/cues.dart';
 import '../audio/playback_queue.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
@@ -30,6 +31,7 @@ class RoomSession {
     required this.uploader,
     required this.recorder,
     required this.player,
+    this.cues = const SilentCues(),
   }) {
     _queue = PlaybackQueue(
       clock: clock,
@@ -70,6 +72,10 @@ class RoomSession {
 
   final PttRecorder recorder;
   final SegmentPlayer player;
+
+  /// Os avisos de "pode falar" e "acabou". Silenciosos por padrão porque nos
+  /// testes não há aparelho de som.
+  final PttCues cues;
 
   late final PlaybackQueue _queue;
 
@@ -322,14 +328,25 @@ class RoomSession {
   Future<void> stopPlayback() => player.interrupt();
 
   /// Meio-duplex: enquanto o PTT está acionado, nada toca.
+  ///
+  /// A ordem dos quatro passos é toda deliberada. Segurar a fila **antes** de
+  /// interromper impede que a fala seguinte comece no vão; o aviso toca com a
+  /// fila já segura, então ele nunca disputa com uma voz; e ele toca **até o
+  /// fim** antes de a captura abrir, senão o microfone gravaria o próprio
+  /// aviso quando não houver fone.
   Future<void> pressPtt() async {
     _queue.pttHeld = true;
     await player.interrupt();
+    await cues.ready();
     await recorder.start();
   }
 
+  /// Simétrico: o aviso de fim toca com a fila ainda segura, e só depois a
+  /// conversa volta. Soltar a fila antes deixaria o "acabou" por cima da
+  /// próxima fala.
   Future<void> releasePtt() async {
     await recorder.stop();
+    await cues.done();
     _queue.pttHeld = false;
   }
 
