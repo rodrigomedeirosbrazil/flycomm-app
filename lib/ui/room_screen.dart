@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -134,6 +135,12 @@ class _RoomScreenState extends State<RoomScreen> {
       if (mounted) setState(() => _gestureOpen = open);
     });
 
+    // Banner, que fica até ser dispensado, e não SnackBar: quando isto falha a
+    // tela costuma estar bloqueada, e um aviso que passa nunca chega a existir.
+    gesture.problems.listen((error) {
+      if (mounted) setState(() => _lastProblem = _explainPttFailure(error));
+    });
+
     _commands = scope.mediaButtons.commands.listen((_) {
       // setState mesmo quando o gesto não vira gravação: o diagnóstico precisa
       // mostrar o comando que o antirrebote engoliu. É justamente ele que
@@ -143,6 +150,28 @@ class _RoomScreenState extends State<RoomScreen> {
     });
 
     _gesture = gesture;
+  }
+
+  /// Traduz a causa mais provável em vez de despejar a exceção.
+  ///
+  /// O iOS proíbe **iniciar** gravação com o app em segundo plano — não existe
+  /// chave de Info.plist que libere, e o entitlement é restrito. É a regra que
+  /// faz o gesto com a tela bloqueada funcionar no Android e não no iPhone. Ler
+  /// `PlatformException(record, ...)` não ensinaria isso a ninguém.
+  ///
+  /// O estado do ciclo de vida é lido agora, não guardado: este ouvinte roda no
+  /// instante da falha, com o app ainda onde estava.
+  String _explainPttFailure(Object error) {
+    final background =
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+
+    if (Platform.isIOS && background) {
+      return 'O iPhone não deixa começar a gravar com o app em segundo plano, '
+          'então o gesto não abriu o microfone — o bipe grave duplo foi isso. '
+          'Com o app na frente funciona. No Android funciona até bloqueado.';
+    }
+
+    return 'Não deu para abrir o microfone: $error';
   }
 
   void _showMediaButtonLog() {

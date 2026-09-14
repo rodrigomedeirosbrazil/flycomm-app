@@ -95,6 +95,54 @@ void main() {
     expect(calls, ['start', 'stop']);
   });
 
+  test('captura que não abre volta o estado atrás e conta o porquê', () async {
+    // O iOS recusa abrir o microfone com o app em segundo plano. Sem isto o
+    // alternador ficava "gravando" para sempre, sem teto e sem ninguém avisado.
+    final ptt = GesturePtt(
+      start: () async => throw StateError('o iPhone recusou o microfone'),
+      stop: () async => calls.add('stop'),
+      debounce: const Duration(milliseconds: 40),
+      ceiling: const Duration(milliseconds: 100),
+    );
+    open = ptt;
+
+    final problems = <Object>[];
+    ptt.problems.listen(problems.add);
+
+    await ptt.handle();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(ptt.isRecording, isFalse);
+    expect(problems, hasLength(1));
+    expect(calls, isEmpty, reason: 'não havia captura para parar');
+
+    // E o teto não pode disparar sobre uma gravação que nunca existiu.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(calls, isEmpty);
+  });
+
+  test('depois de uma falha, o gesto seguinte ainda abre', () async {
+    var refuse = true;
+    final ptt = GesturePtt(
+      start: () async {
+        if (refuse) throw StateError('recusado');
+        calls.add('start');
+      },
+      stop: () async => calls.add('stop'),
+      debounce: Duration.zero,
+      ceiling: const Duration(milliseconds: 500),
+    );
+    open = ptt;
+    ptt.problems.listen((_) {});
+
+    await ptt.handle();
+    refuse = false;
+    await ptt.handle();
+
+    expect(ptt.isRecording, isTrue);
+    expect(calls, ['start']);
+  });
+
   test('o teto não fecha uma gravação que o toque já fechou', () async {
     final ptt = build();
 

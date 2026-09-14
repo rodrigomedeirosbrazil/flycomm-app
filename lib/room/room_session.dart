@@ -338,7 +338,23 @@ class RoomSession {
     _queue.pttHeld = true;
     await player.interrupt();
     await cues.ready();
-    await recorder.start();
+
+    try {
+      await recorder.start();
+    } catch (error) {
+      // O aviso de "pode falar" já tocou quando chegamos aqui, e ele acabou de
+      // virar mentira. Com a tela bloqueada o som é o único canal que resta,
+      // então desmentir é obrigação, não cortesia.
+      //
+      // Acontece de verdade e por regra do sistema: o iOS proíbe **iniciar**
+      // gravação com o app em segundo plano — `CMSession: Client is in the
+      // background and doesn't have the entitlement to start recording in the
+      // background`. Não há chave de Info.plist que libere. O Android não tem
+      // essa regra.
+      await cues.failed();
+      _queue.pttHeld = false;
+      rethrow;
+    }
   }
 
   /// Simétrico: o aviso de fim toca com a fila ainda segura, e só depois a

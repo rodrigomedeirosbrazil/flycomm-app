@@ -21,6 +21,14 @@ abstract class PttCues {
 
   /// Depois de a gravação fechar.
   Future<void> done();
+
+  /// O microfone não abriu.
+  ///
+  /// Precisa soar **diferente** dos outros dois, não mais alto: com a tela
+  /// bloqueada este é o único canal que resta, e um aviso que se parece com
+  /// "pode falar" é pior que aviso nenhum — o piloto fala para o vazio achando
+  /// que gravou.
+  Future<void> failed();
 }
 
 /// O que os testes usam: não há aparelho de som num `flutter test`.
@@ -32,6 +40,9 @@ class SilentCues implements PttCues {
 
   @override
   Future<void> done() async {}
+
+  @override
+  Future<void> failed() async {}
 }
 
 /// Dois tons sintetizados, sem arquivo de asset.
@@ -45,8 +56,13 @@ class ToneCues implements PttCues {
   static const _readyHz = 1100.0;
   static const _doneHz = 660.0;
 
+  /// Grave e **repetido**. A repetição é o que distingue sem depender de o
+  /// piloto lembrar de qual altura significa o quê.
+  static const _failedHz = 320.0;
+
   final _readyPlayer = AudioPlayer();
   final _donePlayer = AudioPlayer();
+  final _failedPlayer = AudioPlayer();
 
   Future<void>? _preparing;
 
@@ -70,6 +86,16 @@ class ToneCues implements PttCues {
         const Duration(milliseconds: 90));
     await _load(_donePlayer, '${directory.path}/cue-done.wav', _doneHz,
         const Duration(milliseconds: 150));
+
+    await _write(
+      '${directory.path}/cue-failed.wav',
+      _failedPlayer,
+      _concat([
+        _tone(hz: _failedHz, length: const Duration(milliseconds: 130)),
+        _silence(const Duration(milliseconds: 80)),
+        _tone(hz: _failedHz, length: const Duration(milliseconds: 130)),
+      ]),
+    );
   }
 
   Future<void> _load(
@@ -77,11 +103,11 @@ class ToneCues implements PttCues {
     String path,
     double hz,
     Duration length,
-  ) async {
-    await File(path).writeAsBytes(
-      wrapPcmInWav(_tone(hz: hz, length: length)),
-      flush: true,
-    );
+  ) =>
+      _write(path, player, _tone(hz: hz, length: length));
+
+  Future<void> _write(String path, AudioPlayer player, Uint8List pcm) async {
+    await File(path).writeAsBytes(wrapPcmInWav(pcm), flush: true);
     await player.setFilePath(path);
   }
 
@@ -90,6 +116,9 @@ class ToneCues implements PttCues {
 
   @override
   Future<void> done() => _play(_donePlayer);
+
+  @override
+  Future<void> failed() => _play(_failedPlayer);
 
   /// ANDAIME QUE SUSTENTA PESO — as três linhas estão na ordem que estão por
   /// motivos diferentes, e tirar qualquer uma quebra de um jeito silencioso.
@@ -148,6 +177,7 @@ class ToneCues implements PttCues {
   Future<void> dispose() async {
     await _readyPlayer.dispose();
     await _donePlayer.dispose();
+    await _failedPlayer.dispose();
   }
 }
 
@@ -176,4 +206,20 @@ Uint8List _tone({required double hz, required Duration length}) {
   }
 
   return pcm;
+}
+
+Uint8List _silence(Duration length) =>
+    Uint8List(length.inMilliseconds * bytesPerMs);
+
+Uint8List _concat(List<Uint8List> parts) {
+  final total = parts.fold(0, (sum, part) => sum + part.length);
+  final joined = Uint8List(total);
+
+  var at = 0;
+  for (final part in parts) {
+    joined.setAll(at, part);
+    at += part.length;
+  }
+
+  return joined;
 }

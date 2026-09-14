@@ -36,6 +36,7 @@ class GesturePtt {
   final Duration ceiling;
 
   final _changes = StreamController<bool>.broadcast();
+  final _problems = StreamController<Object>.broadcast();
 
   DateTime? _lastAccepted;
   Timer? _ceiling;
@@ -47,6 +48,11 @@ class GesturePtt {
   /// Muda quando o microfone abre e quando fecha — inclusive quando fecha
   /// sozinho pelo teto, que é o caso que a tela mais precisa mostrar.
   Stream<bool> get changes => _changes.stream;
+
+  /// A captura não abriu. Quem escuta guarda a causa até alguém ler: quando
+  /// isto acontece a tela costuma estar bloqueada, e um aviso que passa não
+  /// chega a existir.
+  Stream<Object> get problems => _problems.stream;
 
   /// Um comando de mídia chegou.
   Future<void> handle() async {
@@ -65,9 +71,23 @@ class GesturePtt {
     _recording = true;
     _changes.add(true);
 
-    _starting = _start();
+    // O erro é capturado aqui e não relançado: `_starting` é aguardado também
+    // por [_finish], e um futuro que estoura em dois lugares derruba um deles
+    // sem dono.
+    Object? failure;
+    _starting = _start().catchError((Object error) => failure = error);
     await _starting;
     _starting = null;
+
+    if (failure != null) {
+      // Um segundo comando durante o arranque já pode ter desfeito isto.
+      if (_recording) {
+        _recording = false;
+        _changes.add(false);
+      }
+      _problems.add(failure!);
+      return;
+    }
 
     // O teto conta daqui, não do gesto. Entre um e outro há o aviso sonoro, a
     // compensação de latência do fone e o arranque do plugin — medidos em
@@ -97,5 +117,6 @@ class GesturePtt {
   Future<void> dispose() async {
     _ceiling?.cancel();
     await _changes.close();
+    await _problems.close();
   }
 }

@@ -27,6 +27,23 @@ milissegundos e o som sai. Ela depende de um andaime (silêncio em laço) que sa
 quando o framework PushToTalk entrar, na Fase 5. **No Android isso não vale**:
 lá a escuta em segundo plano precisa de Foreground Service, que é Fase 4.
 
+**Falar apertando o fone Bluetooth** funciona nas duas plataformas, e as duas
+são espelhos invertidos uma da outra com a tela bloqueada: o **Android** grava e
+envia normalmente; o **iPhone** recebe o gesto e toca os avisos, mas não grava.
+Não é defeito nosso e não tem contorno — o iOS proíbe *iniciar* gravação com o
+app em segundo plano (`CMSession: Client is in the background and doesn't have
+the entitlement to start recording in the background`), e não existe chave de
+`Info.plist` que libere. Quando isso acontece o app toca um bipe grave duplo e
+guarda o motivo num aviso que fica na tela até ser dispensado, porque um piloto
+de tela apagada não tem outro jeito de saber que ninguém o ouviu.
+
+O caminho sancionado é o framework PushToTalk (iOS 16+), que existe exatamente
+para isto e já está registrado como Fase 5 — exige capability, conta paga e
+APNs. Enquanto ele não entra, PTT com a tela bloqueada é recurso de Android.
+
+Resumindo a inversão: com a tela apagada o iPhone **ouve** e não fala, o Android
+**fala** e não ouve.
+
 O [plano de implementação](docs/superpowers/plans/2026-09-13-fase-2-app-flutter.md)
 é o documento mais útil para entender o porquê de cada decisão: ele carrega o
 contrato verificado contra o servidor real, as divergências encontradas e as
