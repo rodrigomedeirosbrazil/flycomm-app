@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -28,9 +29,14 @@ class _SilentRecorder implements AudioRecorder {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// Conta os downloads de áudio e devolve bytes quaisquer.
+/// Conta o que o app pede à rede: downloads de áudio e rodadas de catch-up.
 class _CountingAdapter implements HttpClientAdapter {
   int downloads = 0;
+  int catchups = 0;
+
+  /// Quanto cada resposta demora. É neste respiro que a segunda chamada
+  /// alcança a primeira.
+  Duration latency = const Duration(milliseconds: 20);
 
   @override
   Future<ResponseBody> fetch(
@@ -38,17 +44,31 @@ class _CountingAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    downloads++;
-    // Um respiro de rede: é aqui que a segunda entrega da mesma mensagem
-    // alcança a primeira.
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    return ResponseBody.fromBytes(
-      List<int>.filled(64, 0),
-      200,
-      headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
-      },
-    );
+    final isCatchup = options.uri.path.endsWith('/catchup');
+    if (isCatchup) {
+      catchups++;
+    } else {
+      downloads++;
+    }
+
+    await Future<void>.delayed(latency);
+
+    if (isCatchup) {
+      final now = DateTime.now().toUtc().toIso8601String();
+      return ResponseBody.fromString(
+        jsonEncode({
+          'server_time': now,
+          'window_start': now,
+          'messages': <dynamic>[],
+        }),
+        200,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    }
+
+    return ResponseBody.fromBytes(List<int>.filled(64, 0), 200);
   }
 
   @override
@@ -138,6 +158,24 @@ void main() {
         expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
         audioUrl: 'http://servidor/messages/$id/audio',
       );
+
+  test('duas recuperações pedidas ao mesmo tempo viram uma busca só', () async {
+    // O que acontece a cada (re)conexão: `open()` pede uma, e o evento
+    // `connected` do WebSocket pede outra um instante depois.
+    await Future.wait([session.syncCatchup(), session.syncCatchup()]);
+
+    expect(adapter.catchups, 1,
+        reason: 'duas recuperações concorrentes são dois GET /catchup e dois '
+            'avisos de buraco para o mesmo buraco');
+  });
+
+  test('a recuperação seguinte busca de novo: a junção é só das simultâneas',
+      () async {
+    await session.syncCatchup();
+    await session.syncCatchup();
+
+    expect(adapter.catchups, 2);
+  });
 
   test('a mesma fala entregue duas vezes ao mesmo tempo baixa e toca uma vez',
       () async {

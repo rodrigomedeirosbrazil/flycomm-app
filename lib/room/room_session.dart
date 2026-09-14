@@ -111,8 +111,29 @@ class RoomSession {
     await syncCatchup();
   }
 
+  /// A recuperação em andamento, se houver. Ver [syncCatchup].
+  Future<void>? _catchingUp;
+
   /// Chamado na entrada e a cada reconexão do WebSocket.
-  Future<void> syncCatchup() async {
+  ///
+  /// Os dois gatilhos disparam quase juntos — `open()` pede uma, e o
+  /// `connected` do WebSocket pede outra assim que o Reverb confirma a
+  /// assinatura —, e sem isto eram dois GET /catchup idênticos por conexão e
+  /// dois avisos de buraco para o mesmo buraco.
+  ///
+  /// Quem chega no meio entra de carona na busca que já está no ar, e isso é
+  /// correto e não um atalho: a janela que o servidor devolve é calculada na
+  /// hora em que ele responde, que é depois de a segunda chamada ter sido
+  /// feita. O que ela queria saber está na resposta que já vem vindo.
+  ///
+  /// A carona vale só para as simultâneas: terminada a busca, a próxima
+  /// chamada vai à rede de novo.
+  Future<void> syncCatchup() {
+    return _catchingUp ??=
+        _syncCatchup().whenComplete(() => _catchingUp = null);
+  }
+
+  Future<void> _syncCatchup() async {
     final since = await history.lastSeenAt(room.id);
     final result = await catchup.fetch(room.id, since: since);
 
