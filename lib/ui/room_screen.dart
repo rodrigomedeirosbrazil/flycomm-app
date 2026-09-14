@@ -124,9 +124,6 @@ class _RoomScreenState extends State<RoomScreen> {
   /// upload, histórico, tudo igual. Nada de caminho paralelo — um caminho
   /// paralelo provaria que o gesto chega, e não que a mensagem sai.
   void _listenToTheHeadset(AppScope scope, RoomSession session) {
-    final buttons = scope.mediaButtons;
-    if (buttons == null) return;
-
     final gesture = GesturePtt(
       start: session.pressPtt,
       stop: session.releasePtt,
@@ -137,7 +134,7 @@ class _RoomScreenState extends State<RoomScreen> {
       if (mounted) setState(() => _gestureOpen = open);
     });
 
-    _commands = buttons.commands.listen((_) {
+    _commands = scope.mediaButtons.commands.listen((_) {
       // setState mesmo quando o gesto não vira gravação: o diagnóstico precisa
       // mostrar o comando que o antirrebote engoliu. É justamente ele que
       // distingue "o fone manda dois" de "eu toquei duas vezes".

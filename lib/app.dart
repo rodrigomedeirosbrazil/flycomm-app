@@ -26,8 +26,8 @@ final _theme = ThemeData(
 class FlycommApp extends StatelessWidget {
   const FlycommApp({super.key, required this.mediaButtons});
 
-  /// A sessão de mídia, montada no `main` antes de tudo. Nula fora do iPhone.
-  final MediaButtonHandler? mediaButtons;
+  /// A sessão de mídia, montada no `main` antes de tudo.
+  final MediaButtonHandler mediaButtons;
 
   // Sem MaterialApp aqui: ele precisa ficar ABAIXO do AppScope, senão as telas
   // empurradas no Navigator não enxergam o escopo (ver _Shell).
@@ -55,7 +55,7 @@ class _Shell extends StatelessWidget {
 class _Bootstrap extends StatefulWidget {
   const _Bootstrap({required this.mediaButtons});
 
-  final MediaButtonHandler? mediaButtons;
+  final MediaButtonHandler mediaButtons;
 
   @override
   State<_Bootstrap> createState() => _BootstrapState();

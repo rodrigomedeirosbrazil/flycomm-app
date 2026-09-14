@@ -43,9 +43,8 @@ class AppScope extends InheritedWidget {
   final HistoryRepository history;
   final AudioStore audioStore;
 
-  /// Quem recebe o gesto do fone. Nulo fora do iPhone, e a tela precisa
-  /// aguentar isso — no Android não há sessão de mídia nesta fatia.
-  final MediaButtonHandler? mediaButtons;
+  /// Quem recebe o gesto do fone, nas duas plataformas.
+  final MediaButtonHandler mediaButtons;
 
   /// Mora aqui, e não na sessão de sala, porque a insistência do upload dura
   /// minutos e precisa atravessar o piloto sair da tela. Continua sendo fila em

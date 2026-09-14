@@ -11,7 +11,7 @@ import '../audio/media_buttons.dart';
 class MediaButtonLog extends StatelessWidget {
   const MediaButtonLog({super.key, required this.handler, this.cues});
 
-  final MediaButtonHandler? handler;
+  final MediaButtonHandler handler;
 
   /// Só para mostrar a latência de saída medida. O número decide quanto o
   /// aviso sonoro precisa esperar antes de abrir o microfone, e chutá-lo seria
@@ -20,19 +20,7 @@ class MediaButtonLog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final handler = this.handler;
     final text = Theme.of(context).textTheme;
-
-    if (handler == null) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'A sessão de mídia só está montada no iPhone nesta fatia. '
-          'No Android nenhum gesto chega, e é de propósito.',
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
 
     return StreamBuilder<MediaCommand>(
       stream: handler.commands,
