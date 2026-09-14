@@ -67,6 +67,58 @@ ele funciona no aparelho. Antes de dar qualquer coisa por pronta, rode também
 `flutter build ios --release` (ou `apk`) e abra no celular: os defeitos mais
 caros desta fase só apareceram assim.
 
+## Instalar no aparelho
+
+`flutter run` é para desenvolver com o computador por perto. Para deixar o app
+**no** celular — para voar com ele, ou para você testar sozinho — é outro
+caminho, e ele tem três armadilhas que já custaram uma noite cada.
+
+Compile em **release**, com os quatro defines, e instale por cima:
+
+```bash
+# Android
+flutter build apk --release --dart-define=FLYCOMM_HTTP=http://SEU_IP:8000 --dart-define=FLYCOMM_WS_HOST=SEU_IP --dart-define=FLYCOMM_WS_PORT=8080 --dart-define=FLYCOMM_WS_KEY=flycomm-local-key
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+```bash
+# iPhone
+flutter build ios --release --dart-define=FLYCOMM_HTTP=http://SEU_IP:8000 --dart-define=FLYCOMM_WS_HOST=SEU_IP --dart-define=FLYCOMM_WS_PORT=8080 --dart-define=FLYCOMM_WS_KEY=flycomm-local-key
+xcrun devicectl device install app --device SEU_UDID build/ios/iphoneos/Runner.app
+```
+
+**Não use `flutter install`.** Ele faz duas coisas ruins de uma vez: não
+compila — manda para o aparelho o último build que estiver em `build/`, que
+pode ser de horas atrás — e **desinstala a versão antiga antes de instalar**,
+o que no iOS leva junto o diretório de dados do app. O histórico é 100% local e
+permanente, e o servidor não tem cópia: desinstalar é apagá-lo para sempre.
+`adb install -r` e `devicectl install` substituem sem apagar. No Android isso só
+vale porque o release é assinado com a mesma chave de debug (ver
+`android/app/build.gradle.kts`); trocar por uma chave de verdade obriga a
+desinstalar, e aí o histórico vai junto.
+
+**Debug não abre sozinho no iPhone.** Um `.app` debug roda em JIT, e o iOS
+recusa lançar isso fora do tooling — a tela fica em branco com um aviso de que
+apps em debug só devem ser lançados pelo Flutter. Release resolve, com o preço
+de que o `trace()` é `assert` e **some**: nada de narração no logcat sobre pico
+de captura, idade da fala ou decisão de tocar. Quando precisar desse rastro, é
+`flutter run --debug` com os mesmos defines.
+
+**Os defines somem se você não olhar.** Sem eles o app aborta na primeira linha
+do `main` e a tela fica em branco — de propósito, e o motivo aparece inteiro no
+log:
+
+```bash
+adb logcat -d | grep '^[EW]/flutter'   # Android
+xcrun devicectl device process launch --console --device SEU_UDID br.com.medeirostec.flycomm
+```
+
+Um detalhe de shell que já mordeu aqui: **não** guarde os defines numa variável
+e a expanda sem aspas. O zsh não divide parâmetros em palavras, e os quatro
+flags viram um define só, com o resto da linha dentro do valor do primeiro. O
+sintoma é enganoso — o log reclama de três defines faltando, depois de dois, e
+o que "passou" está com lixo dentro. Escreva os flags literalmente.
+
 ## Nota sobre credenciais
 
 Os valores que aparecem no plano e nos testes (`demo-device-*`, `demo-secret-*`,
