@@ -73,6 +73,10 @@ class ReverbClient {
   bool _closing = false;
   int _attempt = 0;
 
+  /// A reconexão agendada. Existe para que ela seja uma só: ver
+  /// [_scheduleReconnect].
+  Timer? _retry;
+
   Uri get _uri => Uri(
         scheme: useTls ? 'wss' : 'ws',
         host: host,
@@ -94,6 +98,12 @@ class ReverbClient {
   }
 
   Future<void> _open() async {
+    // O socket anterior sai ANTES de o novo entrar. Sem isto, uma queda que só
+    // deu erro — sem fechar — deixa o velho de pé: dois sockets assinados no
+    // mesmo canal, cada `message.new` chegando duas vezes, e a mesma fala
+    // tocando duas vezes seguidas. Cada nova queda somava mais um.
+    await _drop();
+
     _emitConnection(ReverbConnection.connecting);
 
     final channel = await _connect(_uri);
@@ -105,6 +115,17 @@ class ReverbClient {
       onDone: _scheduleReconnect,
       cancelOnError: false,
     );
+  }
+
+  /// Larga o socket atual sem mexer no resto do estado. `cancel` não dispara
+  /// `onDone`, então isto não realimenta a reconexão.
+  Future<void> _drop() async {
+    final socket = _socket;
+    final channel = _channel;
+    _socket = null;
+    _channel = null;
+    await socket?.cancel();
+    await channel?.sink.close();
   }
 
   void _send(Map<String, dynamic> frame) =>
@@ -226,8 +247,14 @@ class ReverbClient {
     return null;
   }
 
+  /// Uma queda, uma reconexão.
+  ///
+  /// O stream entrega `onError` **e** `onDone` pela mesma queda, e cada um
+  /// chamava isto: duas tentativas, dois sockets vivos, e daí em diante toda
+  /// fala entregue em duplicata. Foi assim que o áudio passou a tocar três
+  /// vezes no iPhone — o original mais um socket por queda.
   void _scheduleReconnect() {
-    if (_closing || _room == null) return;
+    if (_closing || _room == null || _retry != null) return;
 
     _emitConnection(ReverbConnection.disconnected);
     _attempt++;
@@ -238,7 +265,8 @@ class ReverbClient {
       milliseconds: (500 * (1 << (_attempt - 1))).clamp(500, 8000),
     );
 
-    Timer(wait, () {
+    _retry = Timer(wait, () {
+      _retry = null;
       if (_closing) return;
       _open().catchError((Object _) => _scheduleReconnect());
     });
@@ -246,10 +274,9 @@ class ReverbClient {
 
   Future<void> disconnect() async {
     _closing = true;
-    await _socket?.cancel();
-    _socket = null;
-    await _channel?.sink.close();
-    _channel = null;
+    _retry?.cancel();
+    _retry = null;
+    await _drop();
     _members.clear();
     _emitConnection(ReverbConnection.disconnected);
   }

@@ -1,0 +1,154 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flycomm/audio/player.dart';
+import 'package:flycomm/audio/recorder.dart';
+import 'package:flycomm/history/audio_store.dart';
+import 'package:flycomm/history/database.dart';
+import 'package:flycomm/history/history_repository.dart';
+import 'package:flycomm/room/api_client.dart';
+import 'package:flycomm/room/budgets.dart';
+import 'package:flycomm/room/catchup_repository.dart';
+import 'package:flycomm/room/message_api.dart';
+import 'package:flycomm/room/message_uploader.dart';
+import 'package:flycomm/room/models.dart';
+import 'package:flycomm/room/reverb_client.dart';
+import 'package:flycomm/room/room_session.dart';
+import 'package:flycomm/room/server_clock.dart';
+import 'package:record/record.dart';
+
+/// O gravador não participa deste teste, e construir o de verdade chama o
+/// plugin nativo, que não existe aqui.
+class _SilentRecorder implements AudioRecorder {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Conta os downloads de áudio e devolve bytes quaisquer.
+class _CountingAdapter implements HttpClientAdapter {
+  int downloads = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    downloads++;
+    // Um respiro de rede: é aqui que a segunda entrega da mesma mensagem
+    // alcança a primeira.
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    return ResponseBody.fromBytes(
+      List<int>.filled(64, 0),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const budgets = Budgets(
+    playbackDeadline: Duration(seconds: 30),
+    radioRelayDeadline: Duration(seconds: 10),
+    deliveryDeadline: Duration(minutes: 5),
+    segmentMax: Duration(seconds: 5),
+    catchupWindow: Duration(seconds: 60),
+    blobTtl: Duration(minutes: 5),
+  );
+
+  const room = Room(
+    id: 255,
+    name: 'Sala',
+    frequencyHz: null,
+    inviteCode: 'FLY-TEST',
+    createdBy: 1,
+    members: [],
+  );
+
+  late HistoryDatabase db;
+  late _CountingAdapter adapter;
+  late Directory temp;
+  late RoomSession session;
+
+  setUp(() async {
+    db = HistoryDatabase(NativeDatabase.memory());
+    adapter = _CountingAdapter();
+    temp = await Directory.systemTemp.createTemp('flycomm-test');
+
+    final api = ApiClient(baseUrl: 'http://servidor');
+    api.raw.httpClientAdapter = adapter;
+
+    final clock = ServerClock();
+    final history = HistoryRepository(db);
+    final messageApi = MessageApi(api: api);
+
+    session = RoomSession(
+      room: room,
+      budgets: budgets,
+      clock: clock,
+      reverb: ReverbClient(api: api, appKey: 'k', host: 'localhost', port: 8080),
+      catchup: CatchupRepository(api: api, clock: clock),
+      messageApi: messageApi,
+      history: history,
+      audioStore: AudioStore(temp),
+      uploader: MessageUploader(
+        clock: clock,
+        budgets: budgets,
+        history: history,
+        publish: messageApi.publish,
+      ),
+      recorder: PttRecorder(
+        segmentMax: budgets.segmentMax,
+        serverNow: clock.now,
+        recorder: _SilentRecorder(),
+      ),
+      player: SegmentPlayer(),
+    );
+  });
+
+  tearDown(() async {
+    await db.close();
+    temp.deleteSync(recursive: true);
+  });
+
+  RoomMessage message(String id) => RoomMessage(
+        id: id,
+        roomId: room.id,
+        burstId: 'b-1',
+        index: 0,
+        authorId: 510,
+        authorName: 'Marina',
+        durationMs: 5000,
+        origin: 'app',
+        format: 'wav-pcm16-16k',
+        sizeBytes: 160044,
+        capturedAt: DateTime.now().toUtc(),
+        createdAt: DateTime.now().toUtc(),
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        audioUrl: 'http://servidor/messages/$id/audio',
+      );
+
+  test('a mesma fala entregue duas vezes ao mesmo tempo baixa e toca uma vez',
+      () async {
+    final m = message('11111111-1111-1111-1111-111111111111');
+
+    // O evento `message.new` e o catch-up — ou dois WebSockets vivos — entregam
+    // a mesma mensagem sem que uma espere a outra.
+    await Future.wait([session.ingest(m), session.ingest(m)]);
+
+    expect(adapter.downloads, 1,
+        reason: 'duas ingestões simultâneas viram dois downloads e duas '
+            'reproduções da mesma fala');
+  });
+}

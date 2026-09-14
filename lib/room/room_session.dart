@@ -148,15 +148,18 @@ class RoomSession {
   final _ingesting = <String>{};
 
   Future<void> _ingest(RoomMessage message) async {
-    if (_ingesting.contains(message.id)) return;
+    // A reserva do id é SÍNCRONA, antes de qualquer `await`. A versão anterior
+    // olhava o conjunto aqui e só entrava nele depois do `byId`, e nesse
+    // intervalo as duas entregas da mesma fala passavam pela checagem: dois
+    // downloads, duas entradas na fila, a mesma voz tocando duas vezes.
+    if (!_ingesting.add(message.id)) return;
 
-    final known = await history.byId(message.id);
-
-    // Já conhecida e com áudio no disco: nada a fazer.
-    if (known != null && known.audioPath != null) return;
-
-    _ingesting.add(message.id);
     try {
+      final known = await history.byId(message.id);
+
+      // Já conhecida e com áudio no disco: nada a fazer.
+      if (known != null && known.audioPath != null) return;
+
       if (known == null) {
         await _ingestFresh(message);
       } else {
