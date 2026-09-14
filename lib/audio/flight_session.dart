@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'wav.dart';
 
@@ -64,6 +65,10 @@ final radioSessionConfiguration = AudioSessionConfiguration(
 /// morre, não chega `message.new` e não há o que tocar. O áudio é a última
 /// peça, não a primeira.
 ///
+/// Em voo a tela também deixa de apagar sozinha — ver [_holdTheScreen]. É a
+/// outra metade do mesmo estado: com a tela apagada o piloto continua ouvindo,
+/// com a tela acesa ele continua **vendo** o histórico e alcançando o PTT.
+///
 /// A ação é explícita e feita com o app aberto de propósito (7.1 da spec). No
 /// Android ela será obrigatória — desde o Android 12 um serviço com tipo
 /// `microphone` só inicia com o app visível —, e aqui ela é o momento de dizer
@@ -122,6 +127,7 @@ class FlightSession {
     final session = await _ensure();
     await session.setActive(true);
     await _startKeepAlive();
+    await _holdTheScreen(true);
 
     _inFlight = true;
     _changes.add(true);
@@ -190,6 +196,24 @@ class FlightSession {
     }
   }
 
+  /// Em voo a tela não apaga sozinha — e só em voo.
+  ///
+  /// Os dois motivos são de dentro da cabine: o piloto lê o histórico enquanto
+  /// voa, e o PTT da tela é o acionamento que sempre existe, com ou sem fone.
+  /// Nenhum dos dois é toque contínuo, e é justamente por isso que o
+  /// desligamento automático do aparelho cai bem no meio da conversa.
+  ///
+  /// Isto **não** é o keep-alive de silêncio, e um não substitui o outro: o
+  /// silêncio segura o *processo* com a tela apagada; este segura a *tela*.
+  ///
+  /// Também não tenta ser mais forte do que o sistema permite, e é assim que
+  /// se quer: nas duas plataformas o pedido só vale com o app em primeiro
+  /// plano — no Android é `FLAG_KEEP_SCREEN_ON`, que é da janela; no iOS é o
+  /// `idleTimerDisabled`, que o sistema reverte sozinho ao sair —, e o botão
+  /// de bloqueio sempre vence. Sair do app ou bloquear a tela continua
+  /// apagando, sem código nenhum daqui.
+  Future<void> _holdTheScreen(bool hold) => WakelockPlus.toggle(enable: hold);
+
   /// Sai de voo e devolve a sessão ao sistema. A partir daqui o app volta a ser
   /// suspenso normalmente com a tela apagada — e é isso que se quer, porque
   /// manter a sessão ativa fora de voo consome bateria por nada.
@@ -198,6 +222,7 @@ class FlightSession {
 
     await _onInterrupted();
     await _keepAlive?.stop();
+    await _holdTheScreen(false);
     await _session?.setActive(false);
 
     _inFlight = false;
@@ -211,6 +236,9 @@ class FlightSession {
     _subscriptions.clear();
     await _keepAlive?.dispose();
     _keepAlive = null;
+    // Sair da sala tira o voo junto, e a tela volta a apagar sozinha. Sem
+    // isto, o pedido sobreviveria à sala que o fez.
+    await _holdTheScreen(false);
     await _session?.setActive(false);
     await _changes.close();
   }

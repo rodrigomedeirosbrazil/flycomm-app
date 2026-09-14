@@ -428,8 +428,9 @@ class _FrequencyInput extends TextInputFormatter {
 /// O controle de entrar em voo.
 ///
 /// Deliberadamente barulhento quando ligado: é o estado em que o app continua
-/// ouvindo com a tela apagada e consumindo bateria, e o piloto precisa saber
-/// que está nele. Um interruptor discreto seria pior, não melhor.
+/// ouvindo com a tela apagada, segura a tela acesa e consome bateria pelas duas
+/// coisas, e o piloto precisa saber que está nele. Um interruptor discreto
+/// seria pior, não melhor.
 class _FlightBar extends StatelessWidget {
   const _FlightBar({required this.inFlight, required this.onToggle});
 
@@ -468,7 +469,7 @@ class _FlightBar extends StatelessWidget {
                     ),
                     Text(
                       inFlight
-                          ? 'Continua ouvindo com a tela apagada'
+                          ? 'A tela fica acesa, e você ouve mesmo se apagar'
                           : 'Com a tela apagada, você para de receber',
                       style: TextStyle(
                         fontSize: 12,
