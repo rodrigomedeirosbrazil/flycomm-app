@@ -29,6 +29,28 @@ class _SilentRecorder implements AudioRecorder {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Não toca nada. A invariante em teste é de ordem, não de som, e um teste de
+/// host nunca deveria construir um player de verdade.
+class _SilentPlayer extends SegmentPlayer {
+  @override
+  Future<void> play(String filePath) async {}
+
+  @override
+  Future<void> interrupt() async {}
+}
+
+/// Abre e fecha o PTT sem tocar no microfone.
+class _OpenablePttRecorder extends PttRecorder {
+  _OpenablePttRecorder({required super.segmentMax, required super.serverNow})
+      : super(recorder: _SilentRecorder());
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
 /// Conta o que o app pede à rede: downloads de áudio e rodadas de catch-up.
 class _CountingAdapter implements HttpClientAdapter {
   int downloads = 0;
@@ -128,12 +150,11 @@ void main() {
         history: history,
         publish: messageApi.publish,
       ),
-      recorder: PttRecorder(
+      recorder: _OpenablePttRecorder(
         segmentMax: budgets.segmentMax,
         serverNow: clock.now,
-        recorder: _SilentRecorder(),
       ),
-      player: SegmentPlayer(),
+      player: _SilentPlayer(),
     );
   });
 
@@ -188,5 +209,19 @@ void main() {
     expect(adapter.downloads, 1,
         reason: 'duas ingestões simultâneas viram dois downloads e duas '
             'reproduções da mesma fala');
+  });
+
+  test('com o PTT acionado, tocar do histórico não abre uma segunda voz',
+      () async {
+    // A invariante é da spec, não conveniência do app: uma voz por vez, e
+    // enquanto o PTT está acionado nada toca. O botão de repetir encosta no
+    // PTT, então isto deixa de ser um acidente raro.
+    await session.ingest(message('m-1'));
+    await session.pressPtt();
+
+    final problem = await session.playFromHistory('m-1');
+
+    expect(problem, isNotNull);
+    expect(problem, contains('PTT'));
   });
 }

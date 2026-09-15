@@ -310,6 +310,14 @@ class RoomSession {
   /// não toca e não explica nada é indistinguível de um app quebrado, e o
   /// piloto precisa saber se o áudio sumiu ou se o aparelho falhou.
   Future<String?> playFromHistory(String messageId) async {
+    // Meio-duplex: enquanto o PTT está acionado, nada toca. A documentação
+    // desta função já prometia isto e o código não cumpria — só não aparecia
+    // porque exigia dois dedos. Com o botão de repetir encostado no PTT,
+    // passa a aparecer.
+    if (_queue.pttHeld) {
+      return 'O microfone está aberto. Solte o PTT para ouvir.';
+    }
+
     if (!audioStore.has(messageId)) {
       return 'O áudio não está no aparelho: ele venceu no servidor antes de '
           'dar tempo de baixar.';
