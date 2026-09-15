@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../room/models.dart';
 import 'app_scope.dart';
@@ -15,6 +16,7 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   late Future<List<Room>> _rooms;
+  bool _joining = false;
 
   @override
   void didChangeDependencies() {
@@ -55,17 +57,23 @@ class _RoomsScreenState extends State<RoomsScreen> {
       ),
     );
 
+    controller.dispose();
+
     if (code == null || code.isEmpty || !mounted) return;
+
+    setState(() => _joining = true);
 
     try {
       final room = await AppScope.of(context).rooms.join(code);
       if (!mounted) return;
+      setState(() => _joining = false);
       _reload();
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => RoomScreen(room: room)),
       );
     } catch (error) {
       if (!mounted) return;
+      setState(() => _joining = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Não deu para entrar: $error')));
     }
@@ -173,15 +181,38 @@ class _RoomsScreenState extends State<RoomsScreen> {
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: _joinByCode,
-          icon: const Icon(Icons.qr_code),
+          onPressed: _joining ? null : _joinByCode,
+          icon: _joining
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.qr_code),
           label: const Text('Entrar por código'),
         ),
         body: FutureBuilder<List<Room>>(
           future: _rooms,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return Center(child: Text('Erro: ${snapshot.error}'));
+              // A tela de arranque falha pelo mesmo motivo e tem botão; esta
+              // não tinha, e o piloto ficava sem saída a não ser matar o app.
+              return _Refreshable(
+                onRefresh: _reload,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Não deu para buscar suas salas.\n\n${snapshot.error}',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _reload,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tentar de novo'),
+                    ),
+                  ],
+                ),
+              );
             }
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -189,9 +220,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
             final rooms = snapshot.data!;
             if (rooms.isEmpty) {
-              return const Center(
-                child: Text('Nenhuma sala ainda.\nEntre por um código.',
-                    textAlign: TextAlign.center),
+              // Envolvido no refresh de propósito: alguém pode te adicionar a
+              // uma sala enquanto você olha para esta frase.
+              return _Refreshable(
+                onRefresh: _reload,
+                child: const Text(
+                  'Nenhuma sala ainda.\nCrie uma no + ou entre por um código.',
+                  textAlign: TextAlign.center,
+                ),
               );
             }
 
@@ -214,11 +250,52 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         builder: (_) => RoomScreen(room: room),
                       ),
                     ),
+                    // O código é ditado em voz alta, às vezes pelo próprio
+                    // rádio. Copiar tira o erro de transcrição do caminho.
+                    onLongPress: () async {
+                      await Clipboard.setData(
+                          ClipboardData(text: room.inviteCode));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('${room.inviteCode} copiado'),
+                      ));
+                    },
                   );
                 },
               ),
             );
           },
+        ),
+      );
+}
+
+/// Conteúdo centralizado que ainda assim aceita puxar para atualizar.
+///
+/// Um `Center` não rola, e `RefreshIndicator` só dispara sobre um scrollable
+/// que aceita overscroll — daí o `AlwaysScrollableScrollPhysics` e a altura
+/// forçada pelo `ConstrainedBox`.
+class _Refreshable extends StatelessWidget {
+  const _Refreshable({required this.onRefresh, required this.child});
+
+  final VoidCallback onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: () async => onRefresh(),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
         ),
       );
 }
