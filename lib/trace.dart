@@ -17,10 +17,19 @@ import 'package:flutter/foundation.dart';
 /// não ajuda: ele é cego para tudo o que acontece dentro do app.
 ///
 /// A regra ao mexer aqui: cada etapa narra quando **começa** e quando
-/// **termina**. É o intervalo que falta que diz onde parou.
+/// **termina**. É o intervalo que falta que diz onde parou — e por isso cada
+/// linha carimba a hora. Sem o carimbo dá para ver a ordem dos eventos e não
+/// a distância entre eles, que é metade da pergunta: uma fala de 5 s que
+/// termina 800 ms depois de começar foi cortada; uma que termina em 5 s e só
+/// é seguida pela próxima dois segundos depois não foi cortada, faltou buffer.
 void trace(String message) {
   assert(() {
-    debugPrint('[flycomm] $message');
+    final now = DateTime.now();
+    String pad(int value, int width) => value.toString().padLeft(width, '0');
+    final stamp = '${pad(now.minute, 2)}:${pad(now.second, 2)}.'
+        '${pad(now.millisecond, 3)}';
+
+    debugPrint('[flycomm $stamp] $message');
     return true;
   }());
 }

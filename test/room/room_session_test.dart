@@ -357,4 +357,30 @@ void main() {
     expect(identical(session.messages, session.messages), isTrue);
   });
 
+
+  test('a fala que chega no meio espera a anterior terminar', () async {
+    // Uma voz por vez, nunca sobreposta: é a primeira invariante da spec. Uma
+    // rajada de 12 s chega em três mensagens espaçadas de 5 s, que é
+    // exatamente a duração de cada segmento — a fala seguinte chega no
+    // instante em que a anterior está acabando, e é aí que a serialização é
+    // testada de verdade.
+    player.holdAll = true;
+
+    await session.ingest(message('seg-um'));
+    await pumpEventQueue();
+    expect(player.played, hasLength(1), reason: 'a primeira começou');
+
+    await session.ingest(message('seg-dois'));
+    await pumpEventQueue();
+    expect(player.played, hasLength(1),
+        reason: 'a segunda não pode começar com a primeira ainda tocando');
+
+    player.release('seg-um');
+    await pumpEventQueue();
+    expect(player.played, hasLength(2), reason: 'agora sim a segunda toca');
+
+    player.releaseAll();
+    await pumpEventQueue();
+  });
+
 }
