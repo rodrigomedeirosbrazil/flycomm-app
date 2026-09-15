@@ -90,6 +90,11 @@ flutter run \
   --dart-define=FLYCOMM_WS_KEY=flycomm-local-key
 ```
 
+O WebSocket sobe `wss` sempre que `FLYCOMM_HTTP` é `https` — não existe define
+próprio para o esquema do socket, ele é derivado de `FLYCOMM_HTTP`
+([lib/env.dart](lib/env.dart)), porque API e Reverb atravessam a mesma borda e
+os dois esquemas sempre sobem juntos.
+
 Testes de unidade, sem servidor e sem emulador:
 
 ```bash
@@ -129,6 +134,20 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 flutter build ios --release --dart-define=FLYCOMM_HTTP=http://SEU_IP:8000 --dart-define=FLYCOMM_WS_HOST=SEU_IP --dart-define=FLYCOMM_WS_PORT=8080 --dart-define=FLYCOMM_WS_KEY=flycomm-local-key
 xcrun devicectl device install app --device SEU_UDID build/ios/iphoneos/Runner.app
 ```
+
+## Produção
+
+O APK que sai do workflow de release (`.github/workflows/release.yml`) já vem
+apontado para `https://flycomm.medeirostec.com.br`, na 443, HTTP e WebSocket
+(Reverb) no mesmo host — nenhum passo manual depois de instalar. A
+`REVERB_APP_KEY` vem do secret do repositório `FLYCOMM_REVERB_APP_KEY`
+(o mesmo valor de `REVERB_APP_KEY` em `~/flycomm/.env` na VPS); o job falha
+alto se ele estiver vazio, em vez de publicar um APK que não abre.
+
+O banco de produção não roda seed: não existem os dispositivos
+`demo-device-*` nem os convites `FLY-TEST`/`FLY-2FLY` que
+`test/integration/env.dart` usa — os testes de integração continuam
+apontando para o servidor local.
 
 **Não use `flutter install`.** Ele faz duas coisas ruins de uma vez: não
 compila — manda para o aparelho o último build que estiver em `build/`, que

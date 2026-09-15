@@ -87,6 +87,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         appKey: Env.wsKey,
         host: Env.wsHost,
         port: Env.wsPort,
+        useTls: Env.wsUseTls,
       ),
       catchup: scope.catchup,
       messageApi: scope.messageApi,

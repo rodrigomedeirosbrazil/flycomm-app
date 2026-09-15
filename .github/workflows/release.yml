@@ -18,6 +18,13 @@ permissions:
 
 env:
   FLUTTER_VERSION: '3.47.3'
+  # Produção: mesmo host, mesma porta 443, para HTTP e para o Reverb — o
+  # esquema wss vem sozinho de FLYCOMM_HTTP ser https (ver lib/env.dart).
+  # A REVERB_APP_KEY é secret só para não ficar no histórico do repo; ela vai
+  # embutida no APK de qualquer forma, e aparece na URL de conexão.
+  FLYCOMM_HTTP: 'https://flycomm.medeirostec.com.br'
+  FLYCOMM_WS_HOST: 'flycomm.medeirostec.com.br'
+  FLYCOMM_WS_PORT: '443'
   # SHA-256 do certificado de release (CN=Aerovolt, O=Medeirostec) — a mesma
   # keystore do fly-app. O build de release cai nas chaves de DEBUG quando
   # key.properties falta, em silêncio e com sucesso; um secret vazio ou
@@ -125,10 +132,21 @@ jobs:
       # Um APK universal, não --split-per-abi: isso vai na mão para o piloto,
       # e três arquivos são três chances de instalar o errado.
       - name: Build do APK de release
+        env:
+          REVERB_APP_KEY: ${{ secrets.FLYCOMM_REVERB_APP_KEY }}
         run: |
+          set -euo pipefail
+          if [ -z "$REVERB_APP_KEY" ]; then
+            echo "::error::secret FLYCOMM_REVERB_APP_KEY vazio — o APK publicado não abriria."
+            exit 1
+          fi
           flutter build apk --release \
             --build-name='${{ steps.version.outputs.name }}' \
-            --build-number='${{ steps.version.outputs.code }}'
+            --build-number='${{ steps.version.outputs.code }}' \
+            --dart-define=FLYCOMM_HTTP="$FLYCOMM_HTTP" \
+            --dart-define=FLYCOMM_WS_HOST="$FLYCOMM_WS_HOST" \
+            --dart-define=FLYCOMM_WS_PORT="$FLYCOMM_WS_PORT" \
+            --dart-define=FLYCOMM_WS_KEY="$REVERB_APP_KEY"
 
       - name: Conferir que o APK saiu com a chave de release
         run: |
