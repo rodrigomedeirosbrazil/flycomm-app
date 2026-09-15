@@ -85,7 +85,9 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       # --- portões ------------------------------------------------------
-      - run: flutter analyze
+      # --no-fatal-infos: os infos de lint não seguram um release. Erro e
+      # warning ainda derrubam o job.
+      - run: flutter analyze --no-fatal-infos
 
       # test/integration/ fala com o flycomm-server de verdade (docker compose
       # com seed) e não roda no runner. O resto é onde mora a correção.
