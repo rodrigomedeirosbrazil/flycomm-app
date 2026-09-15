@@ -250,10 +250,19 @@ entra na gravação. A ordem dos quatro passos do `pressPtt` não muda.
 com áudio no aparelho. "Diga de novo" é a afordância mais antiga do rádio, e
 hoje ela exige achar a linha certa numa lista.
 
-Recebida e não qualquer uma: a própria fala o piloto acabou de dizer. A seleção
-— a mais nova, de outro autor, com `audioPath` — é função pura sobre
-`List<LocalMessage>`, pelo mesmo motivo do §6.6. Atalho para `playFromHistory`,
-que já marca como ouvida.
+Recebida e não qualquer uma: a própria fala o piloto acabou de dizer.
+
+**E é a rajada inteira, não o último segmento.** Uma fala de 12 s são três
+mensagens com o mesmo `burst_id` e índices 0, 1 e 2 (§5 da spec da Fase 2).
+Repetir só a mais nova devolveria os últimos dois segundos de uma frase — o
+suficiente para parecer que o botão funciona e para não entregar a informação,
+que é o pior dos dois. Então: a rajada mais nova de outro autor com áudio no
+aparelho, tocada em ordem de índice crescente.
+
+A seleção da rajada é função pura sobre `List<LocalMessage>`, pelo mesmo motivo
+do §6.6. A reprodução reaproveita o caminho de `playFromHistory` — que já marca
+como ouvida — segmento a segmento, e **para no meio se o PTT for acionado**: o
+meio-duplex vale para a repetição como vale para a fila.
 
 ---
 
@@ -287,7 +296,8 @@ promete.
   para saber, em vez de mostrar a lista velha
 - Um terceiro aparelho que entra na sala aparece na folha dos outros dois sem
   que eles recarreguem
-- Segurar o PTT e tocar em repetir não produz duas vozes
+- Repetir uma fala de 12 s toca os três segmentos em ordem, sem buraco
+- Segurar o PTT durante a repetição a interrompe, e não produz duas vozes
 - Negar o microfone, concedê-lo nos ajustes e voltar ao app: o aviso some sem
   reiniciar
 
