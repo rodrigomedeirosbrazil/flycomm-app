@@ -71,11 +71,98 @@ class _RoomsScreenState extends State<RoomsScreen> {
     }
   }
 
+  /// Cria e **abre** a sala criada, mesmo desfecho de entrar por código: quem
+  /// acabou de criar quer o código de convite, que está lá dentro.
+  Future<void> _createRoom() async {
+    final scope = AppScope.of(context);
+    final name = TextEditingController();
+    final frequency = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nova sala'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Nome da sala'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: frequency,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FrequencyInput()],
+              decoration: const InputDecoration(
+                labelText: 'Frequência (opcional)',
+                suffixText: 'MHz',
+                hintText: '145,550',
+                helperText: 'Dá para combinar depois.',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Criar'),
+          ),
+        ],
+      ),
+    );
+
+    final chosen = name.text.trim();
+    final rawFrequency = frequency.text.trim();
+    name.dispose();
+    frequency.dispose();
+
+    if (confirmed != true || chosen.isEmpty || !mounted) return;
+
+    final hz = rawFrequency.isEmpty
+        ? null
+        : scope.config.frequencyHzFromInput(rawFrequency);
+
+    if (rawFrequency.isNotEmpty && hz == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Não consegui ler isso como uma frequência das faixas do rádio '
+          '(136–174 e 400–470 MHz). Tente 145,550 ou 145550.',
+        ),
+      ));
+      return;
+    }
+
+    try {
+      final room = await scope.rooms.create(name: chosen, frequencyHz: hz);
+      if (!mounted) return;
+      _reload();
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => RoomScreen(room: room)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Não deu para criar: $error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
           title: const Text('Minhas salas'),
           actions: [
+            IconButton(
+              onPressed: _createRoom,
+              icon: const Icon(Icons.add),
+              tooltip: 'Nova sala',
+            ),
             IconButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
