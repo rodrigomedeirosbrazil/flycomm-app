@@ -12,6 +12,7 @@ import '../audio/media_buttons.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
 import '../history/database.dart';
+import '../history/replay.dart';
 import '../room/models.dart';
 import '../room/reverb_client.dart';
 import '../room/room_session.dart';
@@ -42,6 +43,7 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _inFlight = false;
   bool _gestureOpen = false;
   String? _lastProblem;
+  List<LocalMessage> _rows = const [];
 
   @override
   void didChangeDependencies() {
@@ -406,6 +408,27 @@ class _RoomScreenState extends State<RoomScreen> {
         .showSnackBar(SnackBar(content: Text(problem)));
   }
 
+  /// "Diga de novo" é a afordância mais antiga do rádio, e até aqui ela exigia
+  /// achar a linha certa numa lista que cresce o voo inteiro.
+  Future<void> _replayLast(RoomSession session, List<LocalMessage> rows) async {
+    final burst = lastIncomingBurst(rows);
+
+    if (burst.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ninguém falou ainda — não há o que repetir.'),
+      ));
+      return;
+    }
+
+    final problem =
+        await session.replayBurst(burst.map((m) => m.id).toList());
+
+    if (problem == null || !mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(problem)));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -471,6 +494,11 @@ class _RoomScreenState extends State<RoomScreen> {
               stream: session.messages,
               builder: (context, snapshot) {
                 final rows = snapshot.data ?? const <LocalMessage>[];
+                // Atribuição simples durante o build, sem setState: o botão de
+                // repetir precisa das linhas, que só existem aqui dentro, e
+                // guardar a última é mais barato que uma segunda assinatura do
+                // mesmo stream.
+                _rows = rows;
                 if (rows.isEmpty) {
                   return const Center(child: Text('Nada dito ainda.'));
                 }
@@ -502,10 +530,37 @@ class _RoomScreenState extends State<RoomScreen> {
           _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: PttButton(
-              enabled: _micGranted,
-              onPress: session.pressPtt,
-              onRelease: session.releasePtt,
+            child: Row(
+              children: [
+                Expanded(
+                  child: PttButton(
+                    enabled: _micGranted,
+                    onPress: session.pressPtt,
+                    onRelease: session.releasePtt,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: 140,
+                  width: 84,
+                  child: OutlinedButton(
+                    onPressed: () => _replayLast(session, _rows),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.replay, size: 30),
+                        SizedBox(height: 6),
+                        Text('Repetir', textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

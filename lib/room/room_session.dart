@@ -334,6 +334,22 @@ class RoomSession {
     }
   }
 
+  /// Toca uma rajada inteira, em ordem, e **para no meio se o PTT for
+  /// acionado**: o meio-duplex vale para a repetição como vale para a fila.
+  ///
+  /// Parar não é erro e não devolve razão — o piloto interrompeu de propósito,
+  /// porque quis falar.
+  Future<String?> replayBurst(List<String> messageIds) async {
+    for (final id in messageIds) {
+      if (_queue.pttHeld) return null;
+
+      final problem = await playFromHistory(id);
+      if (problem != null) return problem;
+    }
+
+    return null;
+  }
+
   /// Para o que estiver tocando, sem mexer na fila. Usado quando o sistema
   /// tira a sessão de áudio do app — ligação entrando, fone desconectado.
   Future<void> stopPlayback() => player.interrupt();
