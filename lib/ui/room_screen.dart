@@ -32,7 +32,7 @@ class RoomScreen extends StatefulWidget {
   State<RoomScreen> createState() => _RoomScreenState();
 }
 
-class _RoomScreenState extends State<RoomScreen> {
+class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   RoomSession? _session;
   FlightSession? _flight;
   GesturePtt? _gesture;
@@ -49,6 +49,26 @@ class _RoomScreenState extends State<RoomScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_session == null) _open();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// A metade que importa do botão de ajustes.
+  ///
+  /// Sem isto, o piloto concede a permissão, volta, e encontra a mesma frase
+  /// dizendo que ele só ouve. Ele não tem como saber que o texto é que está
+  /// velho.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _micGranted) return;
+
+    Permission.microphone.status.then((status) {
+      if (mounted && status.isGranted) setState(() => _micGranted = true);
+    });
   }
 
   Future<void> _open() async {
@@ -178,6 +198,7 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _commands?.cancel();
     _gesture?.dispose();
     _cues?.dispose();
@@ -522,9 +543,19 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
           ),
           if (!_micGranted)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Sem permissão de microfone: você só ouve.'),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Sem permissão de microfone: você só ouve.'),
+                  ),
+                  TextButton(
+                    onPressed: openAppSettings,
+                    child: const Text('Ajustes'),
+                  ),
+                ],
+              ),
             ),
           if (_gestureOpen) const _GestureBar(),
           _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
