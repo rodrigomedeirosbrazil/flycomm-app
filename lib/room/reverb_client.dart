@@ -65,10 +65,23 @@ class ReverbClient {
   /// foi desenhada para cobrir é justamente o WebSocket que cai e volta.
   Stream<ReverbConnection> get connectionState => _connection.stream;
 
+  /// O último valor, para quem assina depois do evento.
+  ///
+  /// Os dois eventos que a tela da sala precisa acontecem dentro de `open()`,
+  /// antes de existir widget: a presença chega no `subscription_succeeded` e a
+  /// conexão vira `connected` logo ali. Um StreamBuilder que assinasse depois
+  /// ficaria sem dado nenhum e desenharia a sala inteira como fora — que é
+  /// justamente a informação errada mais alarmante que esta tela pode dar.
+  RoomPresence get presenceNow =>
+      RoomPresence(members: _members.values.toList(growable: false));
+
+  ReverbConnection get connectionNow => _connectionState;
+
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _socket;
   Room? _room;
   final _members = <int, Member>{};
+  ReverbConnection _connectionState = ReverbConnection.disconnected;
 
   bool _closing = false;
   int _attempt = 0;
@@ -232,6 +245,7 @@ class ReverbClient {
   /// dispose() fecha os controladores, e disconnect() emite. Chamar dispose()
   /// duas vezes — ou disconnect() depois dele — não pode explodir.
   void _emitConnection(ReverbConnection state) {
+    _connectionState = state;
     if (_connection.isClosed) return;
     _connection.add(state);
   }

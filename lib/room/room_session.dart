@@ -105,6 +105,9 @@ class RoomSession {
   Stream<RoomPresence> get presence => reverb.presence;
   Stream<ReverbConnection> get connectionState => reverb.connectionState;
 
+  RoomPresence get presenceNow => reverb.presenceNow;
+  ReverbConnection get connectionNow => reverb.connectionNow;
+
   Future<void> open() async {
     // Cada (re)assinatura roda o catch-up de novo. É isto que cobre o caso para
     // o qual a janela de 60 s foi desenhada: o WebSocket cai e volta oito
