@@ -84,37 +84,61 @@ class MessageTile extends StatelessWidget {
     final detail = [clockOf(message.recordedAt), if (label.isNotEmpty) label]
         .join(' · ');
 
+    // Tocando agora: a marca é do **card inteiro** — fundo, ícone de origem,
+    // título e o botão de play, que deixa de ser um convite e vira um estado.
+    // A pergunta do piloto é "qual destes está tocando?", e uma linha separada
+    // em outro canto da tela não responde isso: obriga a comparar dois lugares.
+    final speaking = colors.onPrimaryContainer;
+
+    // `graphic_eq` e não `pause`: tocar de novo recomeça a fala, não retoma.
+    // Um ícone de pausa prometeria um controle que não existe.
+    final trailingIcon = isPlaying
+        ? Icons.graphic_eq
+        : (hasAudio ? Icons.play_arrow : Icons.cloud_off);
+
     // A linha inteira toca, não só o ícone: a spec diz "ouvível por toque", e
     // um alvo de 24 px é inoperável com luva, em voo.
     return ListTile(
       onTap: onPlay,
-      // Fundo inteiro, e não só o ícone: em voo a tela é olhada de relance, e
-      // um alvo de 24 px não se distingue à distância de um braço.
       tileColor: isPlaying ? colors.primaryContainer : null,
       leading: Icon(
         isPlaying ? Icons.volume_up : icon,
-        color: isPlaying ? colors.onPrimaryContainer : color,
+        color: isPlaying ? speaking : color,
       ),
-      title: Text('$author · $seconds s'),
+      title: Text(
+        '$author · $seconds s',
+        style: TextStyle(
+          color: isPlaying ? speaking : null,
+          fontWeight: isPlaying ? FontWeight.bold : null,
+        ),
+      ),
       subtitle: Row(
         children: [
           Flexible(
             child: Text(
               detail,
-              style: TextStyle(color: label.isEmpty ? null : color),
+              style: TextStyle(
+                color: isPlaying ? speaking : (label.isEmpty ? null : color),
+              ),
             ),
           ),
           if (heard != null) ...[
             const SizedBox(width: 8),
-            Icon(heard.$3, size: 14, color: heard.$2),
+            Icon(heard.$3, size: 14, color: isPlaying ? speaking : heard.$2),
             const SizedBox(width: 4),
-            Text(heard.$1, style: TextStyle(fontSize: 12, color: heard.$2)),
+            Text(
+              heard.$1,
+              style: TextStyle(
+                fontSize: 12,
+                color: isPlaying ? speaking : heard.$2,
+              ),
+            ),
           ],
         ],
       ),
       trailing: Icon(
-        hasAudio ? Icons.play_arrow : Icons.cloud_off,
-        color: hasAudio ? null : colors.outline,
+        trailingIcon,
+        color: isPlaying ? speaking : (hasAudio ? null : colors.outline),
       ),
     );
   }

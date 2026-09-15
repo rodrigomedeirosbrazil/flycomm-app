@@ -303,14 +303,22 @@ class RoomSession {
   /// O `finally` não é zelo: a reprodução é interrompida de propósito — PTT
   /// acionado, ligação entrando —, e se a marca não saísse nesses caminhos a
   /// tela ficaria dizendo que alguém fala enquanto o rádio está mudo.
+  ///
+  /// **Só apaga a marca se ela ainda for minha.** Tocar B com A tocando
+  /// encerra a reprodução de A — é o mesmo player —, então o `finally` de A
+  /// roda *depois* do anúncio de B. Sem esta guarda, o último a falar é o de
+  /// A, e a tela apaga o destaque no instante em que B começou: o piloto toca
+  /// outra fala e a tela não muda nada.
   Future<void> _whilePlaying(String messageId, Future<void> Function() body) async {
     _nowPlayingId = messageId;
     if (!_nowPlaying.isClosed) _nowPlaying.add(messageId);
     try {
       await body();
     } finally {
-      _nowPlayingId = null;
-      if (!_nowPlaying.isClosed) _nowPlaying.add(null);
+      if (_nowPlayingId == messageId) {
+        _nowPlayingId = null;
+        if (!_nowPlaying.isClosed) _nowPlaying.add(null);
+      }
     }
   }
 

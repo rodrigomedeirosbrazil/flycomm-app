@@ -19,7 +19,6 @@ import '../env.dart';
 import 'app_scope.dart';
 import 'frequency.dart';
 import 'message_tile.dart';
-import 'now_playing_bar.dart';
 import 'ptt_button.dart';
 import 'roster_sheet.dart';
 
@@ -537,7 +536,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-          NowPlayingBar(session: session, me: scope.userId),
           if (_gestureOpen) const _GestureBar(),
           _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
           Padding(

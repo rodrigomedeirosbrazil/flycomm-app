@@ -40,10 +40,32 @@ class _SilentPlayer extends SegmentPlayer {
   /// precisa ser observado: entre um segmento e o próximo.
   void Function()? onPlay;
 
+  /// Quando ligado, cada reprodução fica pendurada até [release]. É o que
+  /// permite observar duas falas em voo ao mesmo tempo — que é exatamente o
+  /// que o player de verdade faz quando uma começa por cima da outra.
+  bool holdAll = false;
+  final _holds = <String, Completer<void>>{};
+
+  void release(String idFragment) {
+    final key = _holds.keys.firstWhere((k) => k.contains(idFragment));
+    _holds.remove(key)!.complete();
+  }
+
+  void releaseAll() {
+    for (final hold in _holds.values.toList()) {
+      hold.complete();
+    }
+    _holds.clear();
+  }
+
   @override
   Future<void> play(String filePath) async {
     played.add(filePath);
     onPlay?.call();
+    if (!holdAll) return;
+    final hold = Completer<void>();
+    _holds[filePath] = hold;
+    await hold.future;
   }
 
   @override
@@ -290,6 +312,39 @@ void main() {
     await watching.cancel();
 
     expect(announced.last, isNull, reason: 'o silêncio precisa ser anunciado');
+  });
+
+
+  test('tocar outra fala move a marca, e o fim da anterior não a apaga',
+      () async {
+    // O player é um só: mandar B tocar encerra a reprodução de A, então o
+    // `finally` de A roda DEPOIS do anúncio de B. Sem a guarda, o último a
+    // falar é o de A e a tela apaga o destaque no instante em que B começou —
+    // o piloto toca outra fala e nada muda na tela.
+    await session.ingest(message('fala-a'));
+    await session.ingest(message('fala-b'));
+    await pumpEventQueue();
+
+    player.holdAll = true;
+
+    unawaited(session.playFromHistory('fala-a'));
+    await pumpEventQueue();
+    expect(session.nowPlayingId, 'fala-a');
+
+    unawaited(session.playFromHistory('fala-b'));
+    await pumpEventQueue();
+    expect(session.nowPlayingId, 'fala-b');
+
+    // A termina agora, encerrada por B ter começado.
+    player.release('fala-a');
+    await pumpEventQueue();
+
+    expect(session.nowPlayingId, 'fala-b',
+        reason: 'o fim de A não pode apagar a marca de B');
+
+    player.releaseAll();
+    await pumpEventQueue();
+    expect(session.nowPlayingId, isNull, reason: 'B terminou, agora é silêncio');
   });
 
 }
