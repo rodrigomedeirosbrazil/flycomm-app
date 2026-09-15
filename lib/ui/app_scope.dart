@@ -29,7 +29,7 @@ class AppScope extends InheritedWidget {
     required this.audioStore,
     required this.mediaButtons,
     required this.uploader,
-    required this.userId,
+    required this.user,
     required super.child,
   });
 
@@ -51,7 +51,18 @@ class AppScope extends InheritedWidget {
   /// memória, que morre com o processo: não é fila de saída persistente.
   final MessageUploader uploader;
 
-  final int userId;
+  /// Quem é o piloto. Muda num lugar só — a tela de configuração — e é lido em
+  /// outro, que é exatamente o caso para o qual o Flutter oferece
+  /// `ValueNotifier`. O app não usa biblioteca de gerência de estado e não
+  /// precisa começar a usar por um campo.
+  ///
+  /// Quem precisa **reagir** à troca escuta o notifier — `ValueListenableBuilder`
+  /// —, nunca `AppScope.of(context)`: `updateShouldNotify` devolve `false` e o
+  /// widget do escopo nunca é recriado, então mudar `user.value` não reconstrói
+  /// dependente nenhum.
+  final ValueNotifier<AuthenticatedUser> user;
+
+  int get userId => user.value.id;
 
   Budgets get budgets => config.budgets;
 

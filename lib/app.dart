@@ -108,7 +108,7 @@ class _BootstrapState extends State<_Bootstrap> {
         history: history,
         publish: messageApi.publish,
       ),
-      userId: user.id,
+      user: ValueNotifier(user),
       child: DatabaseHolder(db: db, child: const _Shell()),
     );
   }

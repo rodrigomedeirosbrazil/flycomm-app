@@ -83,6 +83,9 @@ class RoomSession {
   final _roomChanges = StreamController<Room>.broadcast();
   final _gaps = StreamController<DateTime>.broadcast();
   final _playbackProblems = StreamController<String?>.broadcast();
+  final _nowPlaying = StreamController<String?>.broadcast();
+
+  String? _nowPlayingId;
 
   late Room _room;
 
@@ -101,9 +104,36 @@ class RoomSession {
   /// foi exatamente o que aconteceu em bancada.
   Stream<String?> get playbackProblems => _playbackProblems.stream;
 
-  Stream<List<LocalMessage>> get messages => history.watchRoom(room.id);
+  /// Qual fala está saindo pelo alto-falante agora, ou `null` no silêncio.
+  ///
+  /// A fila é FIFO estrita e toca uma voz por vez — mas até aqui a tela não
+  /// dizia **qual**. Numa sala de rádio isso é a metade que falta: o piloto
+  /// ouve alguém falando e não tem como saber quem, nem voltar naquela fala
+  /// depois, porque não sabe qual linha do histórico era.
+  ///
+  /// Vale para os dois caminhos de reprodução, a fila e o toque no histórico:
+  /// os dois passam por [_whilePlaying]. Se valesse só para um, a marca
+  /// mentiria justamente quando o piloto fosse conferir.
+  Stream<String?> get nowPlaying => _nowPlaying.stream;
+
+  /// O valor atual, para quem assina depois de a reprodução já ter começado —
+  /// mesma razão de `presenceNow`.
+  String? get nowPlayingId => _nowPlayingId;
+
+  /// O histórico da sala, **um stream só para a vida da sessão**.
+  ///
+  /// `late final` e não getter: `watchRoom` monta uma consulta nova a cada
+  /// chamada, e a tela lê isto dentro do `build`. Como há um `setState` por
+  /// fala baixada e por fala tocada, um stream novo a cada leitura fazia o
+  /// StreamBuilder reassinar e voltar à snapshot vazia — a lista piscava, e
+  /// com ela sumia o destaque de quem estava falando, no exato instante em que
+  /// uma fala nova chegava.
+  late final Stream<List<LocalMessage>> messages = history.watchRoom(room.id);
   Stream<RoomPresence> get presence => reverb.presence;
   Stream<ReverbConnection> get connectionState => reverb.connectionState;
+
+  RoomPresence get presenceNow => reverb.presenceNow;
+  ReverbConnection get connectionNow => reverb.connectionNow;
 
   Future<void> open() async {
     // Cada (re)assinatura roda o catch-up de novo. É isto que cobre o caso para
@@ -205,7 +235,7 @@ class RoomSession {
 
   /// Baixa e guarda o áudio. Devolve `true` quando o arquivo fica no disco.
   Future<bool> _fetchAudio(RoomMessage message) async {
-    final tag = message.id.substring(0, 8);
+    final tag = _tag(message.id);
     trace('baixando $tag');
     try {
       final bytes = await messageApi.download(message.audioUrl);
@@ -246,7 +276,7 @@ class RoomSession {
     // aparecem em lugar nenhum quando dão errado — o desvio do relógio, a
     // idade calculada e o orçamento lido do servidor.
     trace(
-      'ingest ${message.id.substring(0, 8)} '
+      'ingest ${_tag(message.id)} '
       'falada=$spokenAt '
       'agora=${clock.now()} '
       'idade=${clock.ageOf(spokenAt).inMilliseconds}ms '
@@ -276,8 +306,32 @@ class RoomSession {
   /// assim que uma fala tocada no alto-falante errado passou por "não tocou".
   /// Quando não dá para tocar, a mensagem vira atrasada: continua ouvível por
   /// toque, e o piloto vê que algo aconteceu.
+  /// Anuncia quem está tocando enquanto [body] roda, e o silêncio depois.
+  ///
+  /// O `finally` não é zelo: a reprodução é interrompida de propósito — PTT
+  /// acionado, ligação entrando —, e se a marca não saísse nesses caminhos a
+  /// tela ficaria dizendo que alguém fala enquanto o rádio está mudo.
+  ///
+  /// **Só apaga a marca se ela ainda for minha.** Tocar B com A tocando
+  /// encerra a reprodução de A — é o mesmo player —, então o `finally` de A
+  /// roda *depois* do anúncio de B. Sem esta guarda, o último a falar é o de
+  /// A, e a tela apaga o destaque no instante em que B começou: o piloto toca
+  /// outra fala e a tela não muda nada.
+  Future<void> _whilePlaying(String messageId, Future<void> Function() body) async {
+    _nowPlayingId = messageId;
+    if (!_nowPlaying.isClosed) _nowPlaying.add(messageId);
+    try {
+      await body();
+    } finally {
+      if (_nowPlayingId == messageId) {
+        _nowPlayingId = null;
+        if (!_nowPlaying.isClosed) _nowPlaying.add(null);
+      }
+    }
+  }
+
   Future<void> _playFromStore(QueuedItem item) async {
-    final tag = item.messageId.substring(0, 8);
+    final tag = _tag(item.messageId);
     trace('fila: vez de $tag, tem audio=${audioStore.has(item.messageId)}');
 
     if (!audioStore.has(item.messageId)) {
@@ -288,7 +342,10 @@ class RoomSession {
 
     try {
       trace('tocando $tag');
-      await player.play(audioStore.pathFor(item.messageId));
+      await _whilePlaying(
+        item.messageId,
+        () => player.play(audioStore.pathFor(item.messageId)),
+      );
       trace('terminou $tag');
       await history.markPlayed(item.messageId);
       _playbackProblems.add(null);
@@ -307,13 +364,24 @@ class RoomSession {
   /// não toca e não explica nada é indistinguível de um app quebrado, e o
   /// piloto precisa saber se o áudio sumiu ou se o aparelho falhou.
   Future<String?> playFromHistory(String messageId) async {
+    // Meio-duplex: enquanto o PTT está acionado, nada toca. A documentação
+    // desta função já prometia isto e o código não cumpria — só não aparecia
+    // porque exigia dois dedos. Com o botão de repetir encostado no PTT,
+    // passa a aparecer.
+    if (_queue.pttHeld) {
+      return 'O microfone está aberto. Solte o PTT para ouvir.';
+    }
+
     if (!audioStore.has(messageId)) {
       return 'O áudio não está no aparelho: ele venceu no servidor antes de '
           'dar tempo de baixar.';
     }
 
     try {
-      await player.play(audioStore.pathFor(messageId));
+      await _whilePlaying(
+        messageId,
+        () => player.play(audioStore.pathFor(messageId)),
+      );
       // Ouvida por toque conta como ouvida: a pergunta que a marca responde é
       // "já escutei isto?", não "a fila tocou isto?".
       await history.markHeard(messageId);
@@ -322,6 +390,7 @@ class RoomSession {
       return 'Não deu para tocar: $error';
     }
   }
+
 
   /// Para o que estiver tocando, sem mexer na fila. Usado quando o sistema
   /// tira a sessão de áudio do app — ligação entrando, fone desconectado.
@@ -402,5 +471,20 @@ class RoomSession {
     await _roomChanges.close();
     await _gaps.close();
     await _playbackProblems.close();
+    await _nowPlaying.close();
   }
 }
+
+/// As oito primeiras letras do id, para o rastro de depuração.
+///
+/// Existe porque `substring(0, 8)` **lança** num id mais curto que oito, e o
+/// estrago disso é desproporcional ao de um log feio: a exceção sobe até
+/// [RoomSession.ingest], que a converte em "Não deu para receber uma fala". Um
+/// erro de formatar log se disfarça de falha de rede, e a fala some do
+/// histórico junto.
+///
+/// Não morde em produção porque todo id de mensagem é um uuid gerado pelo app.
+/// É exatamente por isso que precisa de guarda: o caminho curto só é
+/// exercitado por acidente, e quando for, o sintoma vai apontar para o lugar
+/// errado.
+String _tag(String id) => id.length <= 8 ? id : id.substring(0, 8);

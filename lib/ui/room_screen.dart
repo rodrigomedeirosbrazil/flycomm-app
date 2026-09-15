@@ -17,10 +17,10 @@ import '../room/reverb_client.dart';
 import '../room/room_session.dart';
 import '../env.dart';
 import 'app_scope.dart';
-import 'media_button_log.dart';
+import 'frequency.dart';
 import 'message_tile.dart';
 import 'ptt_button.dart';
-import 'rooms_screen.dart';
+import 'roster_sheet.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -31,7 +31,7 @@ class RoomScreen extends StatefulWidget {
   State<RoomScreen> createState() => _RoomScreenState();
 }
 
-class _RoomScreenState extends State<RoomScreen> {
+class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   RoomSession? _session;
   FlightSession? _flight;
   GesturePtt? _gesture;
@@ -47,6 +47,26 @@ class _RoomScreenState extends State<RoomScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_session == null) _open();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// A metade que importa do botão de ajustes.
+  ///
+  /// Sem isto, o piloto concede a permissão, volta, e encontra a mesma frase
+  /// dizendo que ele só ouve. Ele não tem como saber que o texto é que está
+  /// velho.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _micGranted) return;
+
+    Permission.microphone.status.then((status) {
+      if (mounted && status.isGranted) setState(() => _micGranted = true);
+    });
   }
 
   Future<void> _open() async {
@@ -174,19 +194,9 @@ class _RoomScreenState extends State<RoomScreen> {
     return 'Não deu para abrir o microfone: $error';
   }
 
-  void _showMediaButtonLog() {
-    final buttons = AppScope.of(context).mediaButtons;
-    final cues = _cues;
-
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => MediaButtonLog(handler: buttons, cues: cues),
-    );
-  }
-
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _commands?.cancel();
     _gesture?.dispose();
     _cues?.dispose();
@@ -233,7 +243,7 @@ class _RoomScreenState extends State<RoomScreen> {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [_FrequencyInput()],
+          inputFormatters: [FrequencyInput()],
           decoration: const InputDecoration(
             suffixText: 'MHz',
             hintText: '145,550',
@@ -279,6 +289,133 @@ class _RoomScreenState extends State<RoomScreen> {
     // é assim que ela chega em todo mundo sem recarregar.
   }
 
+  Future<void> _renameRoom() async {
+    final session = _session!;
+    final scope = AppScope.of(context);
+    final controller = TextEditingController(text: session.current.name);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renomear sala'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Nome'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
+    final name = controller.text.trim();
+    controller.dispose();
+
+    if (confirmed != true || name.isEmpty) return;
+
+    // Sem setState: a mudança volta por room.updated e chega em todo mundo sem
+    // recarregar, do mesmo jeito que a frequência já faz.
+    await scope.rooms.update(session.current.id, name: name);
+  }
+
+  /// O código em fonte grande e monoespaçada porque ele é **ditado em voz
+  /// alta**, às vezes pelo próprio rádio — é a mesma razão pela qual o
+  /// alfabeto dele não tem 0/O nem 1/I.
+  Future<void> _showInviteCode() async {
+    final code = _session!.current.inviteCode;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Código de convite'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(
+              code,
+              style: const TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Quem digitar isto entra na sala. Vale em minúscula, sem hífen '
+              'e sem o FLY.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: code));
+              if (context.mounted) Navigator.pop(context);
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('Copiar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A confirmação diz a verdade inteira, inclusive a parte tranquilizadora: o
+  /// histórico é 100% local e permanente, e sair não o apaga. Uma confirmação
+  /// que exagera o estrago treina o piloto a não ler as próximas.
+  Future<void> _leaveRoom() async {
+    final session = _session!;
+    final scope = AppScope.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Sair de ${session.current.name}?'),
+        content: const Text(
+          'Você para de receber as falas desta sala. O histórico deste voo '
+          'continua no aparelho. Para voltar, precisa do código de convite de '
+          'novo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await scope.rooms.leave(session.current.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _lastProblem = 'Não deu para sair: $error');
+    }
+  }
+
   /// Toca e, se não der, diz por quê. Silêncio sem explicação é
   /// indistinguível de app quebrado.
   Future<void> _play(RoomSession session, String messageId) async {
@@ -289,6 +426,7 @@ class _RoomScreenState extends State<RoomScreen> {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(problem)));
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -313,36 +451,28 @@ class _RoomScreenState extends State<RoomScreen> {
       appBar: AppBar(
         title: Text(session.current.name),
         actions: [
-          IconButton(
-            onPressed: _showMediaButtonLog,
-            icon: const Icon(Icons.headset_mic_outlined),
-            tooltip: 'Comandos de mídia recebidos',
-          ),
           TextButton.icon(
             onPressed: _editFrequency,
             icon: const Icon(Icons.radio),
             label: Text(formatFrequency(session.current.frequencyHz)),
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) => switch (value) {
+              'rename' => _renameRoom(),
+              'code' => _showInviteCode(),
+              'leave' => _leaveRoom(),
+              _ => null,
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'rename', child: Text('Renomear sala')),
+              PopupMenuItem(value: 'code', child: Text('Código de convite')),
+              PopupMenuItem(value: 'leave', child: Text('Sair da sala')),
+            ],
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(28),
-          child: StreamBuilder<RoomPresence>(
-            stream: session.presence,
-            builder: (context, snapshot) {
-              final names = snapshot.data?.members
-                      .map((m) => m.displayName)
-                      .join(', ') ??
-                  'conectando…';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6, left: 16, right: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Na sala: $names',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-              );
-            },
-          ),
+          child: PresenceBar(session: session, me: scope.userId),
         ),
       ),
       body: Column(
@@ -371,24 +501,40 @@ class _RoomScreenState extends State<RoomScreen> {
                 // autoscroll de graça, sem ScrollController e sem o salto que
                 // um `jumpTo` no fim da lista produz. Quem rolou para cima
                 // para reler algo fica onde estava, que é o certo.
-                return ListView.separated(
-                  reverse: true,
-                  itemCount: rows.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) => MessageTile(
-                    message: rows[index],
-                    isMine: rows[index].direction == MessageDirection.outgoing ||
-                        rows[index].authorId == scope.userId,
-                    onPlay: () => _play(session, rows[index].id),
+                return StreamBuilder<String?>(
+                  stream: session.nowPlaying,
+                  initialData: session.nowPlayingId,
+                  builder: (context, playing) => ListView.separated(
+                    reverse: true,
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) => MessageTile(
+                      message: rows[index],
+                      isMine:
+                          rows[index].direction == MessageDirection.outgoing ||
+                              rows[index].authorId == scope.userId,
+                      isPlaying: rows[index].id == playing.data,
+                      onPlay: () => _play(session, rows[index].id),
+                    ),
                   ),
                 );
               },
             ),
           ),
           if (!_micGranted)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Sem permissão de microfone: você só ouve.'),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Sem permissão de microfone: você só ouve.'),
+                  ),
+                  TextButton(
+                    onPressed: openAppSettings,
+                    child: const Text('Ajustes'),
+                  ),
+                ],
+              ),
             ),
           if (_gestureOpen) const _GestureBar(),
           _FlightBar(inFlight: _inFlight, onToggle: _toggleFlight),
@@ -403,25 +549,6 @@ class _RoomScreenState extends State<RoomScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Seis dígitos bastam para qualquer frequência das faixas do rádio, escrita
-/// como MHz com decimais (145,550) ou como kHz (145550). O que passa disso é
-/// ignorado em vez de recusado: no ar, o piloto não vai ler mensagem de erro.
-class _FrequencyInput extends TextInputFormatter {
-  static final _allowed = RegExp(r'^[0-9]*[.,]?[0-9]*$');
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue previous,
-    TextEditingValue next,
-  ) {
-    if (!_allowed.hasMatch(next.text)) return previous;
-
-    final digits = next.text.replaceAll(RegExp('[^0-9]'), '');
-
-    return digits.length > 6 ? previous : next;
   }
 }
 

@@ -29,6 +29,61 @@ class _SilentRecorder implements AudioRecorder {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Não toca nada. A invariante em teste é de ordem, não de som, e um teste de
+/// host nunca deveria construir um player de verdade.
+class _SilentPlayer extends SegmentPlayer {
+  /// O que foi pedido, na ordem. Uma rajada de três segmentos tocada inteira e
+  /// uma tocada pela metade só se distinguem por isto.
+  final played = <String>[];
+
+  /// Roda **dentro** de cada reprodução, que é onde o meio-duplex da repetição
+  /// precisa ser observado: entre um segmento e o próximo.
+  void Function()? onPlay;
+
+  /// Quando ligado, cada reprodução fica pendurada até [release]. É o que
+  /// permite observar duas falas em voo ao mesmo tempo — que é exatamente o
+  /// que o player de verdade faz quando uma começa por cima da outra.
+  bool holdAll = false;
+  final _holds = <String, Completer<void>>{};
+
+  void release(String idFragment) {
+    final key = _holds.keys.firstWhere((k) => k.contains(idFragment));
+    _holds.remove(key)!.complete();
+  }
+
+  void releaseAll() {
+    for (final hold in _holds.values.toList()) {
+      hold.complete();
+    }
+    _holds.clear();
+  }
+
+  @override
+  Future<void> play(String filePath) async {
+    played.add(filePath);
+    onPlay?.call();
+    if (!holdAll) return;
+    final hold = Completer<void>();
+    _holds[filePath] = hold;
+    await hold.future;
+  }
+
+  @override
+  Future<void> interrupt() async {}
+}
+
+/// Abre e fecha o PTT sem tocar no microfone.
+class _OpenablePttRecorder extends PttRecorder {
+  _OpenablePttRecorder({required super.segmentMax, required super.serverNow})
+      : super(recorder: _SilentRecorder());
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
 /// Conta o que o app pede à rede: downloads de áudio e rodadas de catch-up.
 class _CountingAdapter implements HttpClientAdapter {
   int downloads = 0;
@@ -100,11 +155,13 @@ void main() {
   late _CountingAdapter adapter;
   late Directory temp;
   late RoomSession session;
+  late _SilentPlayer player;
 
   setUp(() async {
     db = HistoryDatabase(NativeDatabase.memory());
     adapter = _CountingAdapter();
     temp = await Directory.systemTemp.createTemp('flycomm-test');
+    player = _SilentPlayer();
 
     final api = ApiClient(baseUrl: 'http://servidor');
     api.raw.httpClientAdapter = adapter;
@@ -128,12 +185,11 @@ void main() {
         history: history,
         publish: messageApi.publish,
       ),
-      recorder: PttRecorder(
+      recorder: _OpenablePttRecorder(
         segmentMax: budgets.segmentMax,
         serverNow: clock.now,
-        recorder: _SilentRecorder(),
       ),
-      player: SegmentPlayer(),
+      player: player,
     );
   });
 
@@ -189,4 +245,142 @@ void main() {
         reason: 'duas ingestões simultâneas viram dois downloads e duas '
             'reproduções da mesma fala');
   });
+
+  test('com o PTT acionado, tocar do histórico não abre uma segunda voz',
+      () async {
+    // A invariante é da spec, não conveniência do app: uma voz por vez, e
+    // enquanto o PTT está acionado nada toca. O botão de repetir encosta no
+    // PTT, então isto deixa de ser um acidente raro.
+    await session.ingest(message('m-1'));
+    await session.pressPtt();
+
+    final problem = await session.playFromHistory('m-1');
+
+    expect(problem, isNotNull);
+    expect(problem, contains('PTT'));
+  });
+
+  test('id curto não vira falha de recepção disfarçada', () async {
+    // O rastro de depuração corta o id em oito letras, e `substring` lança
+    // quando o id é mais curto que isso. A exceção sobe até `ingest`, que
+    // existe justamente para nada falhar em silêncio, e vira "Não deu para
+    // receber uma fala" — um erro de formatar log disfarçado de falha de rede,
+    // com a fala sumindo do histórico junto.
+    //
+    // Não morde em produção porque todo id real é um uuid, e é exatamente por
+    // isso que precisa de teste: o caminho só é exercitado por acidente.
+    final problems = <String?>[];
+    final watching = session.playbackProblems.listen(problems.add);
+
+    await session.ingest(message('curto'));
+    await pumpEventQueue();
+    await watching.cancel();
+
+    // `null` neste stream é o sinal de recuperação — "voltou a funcionar" —,
+    // não um problema. O que não pode aparecer é razão nenhuma.
+    expect(problems.whereType<String>(), isEmpty);
+    expect(await session.history.byId('curto'), isNotNull);
+  });
+
+
+
+
+  test('anuncia quem está tocando, e o silêncio depois', () async {
+    final announced = <String?>[];
+    final watching = session.nowPlaying.listen(announced.add);
+
+    await session.ingest(message('m-1'));
+    await pumpEventQueue();
+    await watching.cancel();
+
+    expect(announced, ['m-1', null]);
+  });
+
+  test('a marca de quem está tocando sai mesmo quando a reprodução falha',
+      () async {
+    // O `finally` do anúncio não é zelo: a reprodução é interrompida de
+    // propósito — PTT acionado, ligação entrando, fone desconectado. Se a
+    // marca não saísse nesses caminhos, a tela ficaria dizendo que alguém fala
+    // com o rádio mudo, que é pior que não dizer nada.
+    player.onPlay = () => throw StateError('sessão de áudio tomada');
+
+    final announced = <String?>[];
+    final watching = session.nowPlaying.listen(announced.add);
+
+    await session.ingest(message('m-1'));
+    await pumpEventQueue();
+    await watching.cancel();
+
+    expect(announced.last, isNull, reason: 'o silêncio precisa ser anunciado');
+  });
+
+
+  test('tocar outra fala move a marca, e o fim da anterior não a apaga',
+      () async {
+    // O player é um só: mandar B tocar encerra a reprodução de A, então o
+    // `finally` de A roda DEPOIS do anúncio de B. Sem a guarda, o último a
+    // falar é o de A e a tela apaga o destaque no instante em que B começou —
+    // o piloto toca outra fala e nada muda na tela.
+    await session.ingest(message('fala-a'));
+    await session.ingest(message('fala-b'));
+    await pumpEventQueue();
+
+    player.holdAll = true;
+
+    unawaited(session.playFromHistory('fala-a'));
+    await pumpEventQueue();
+    expect(session.nowPlayingId, 'fala-a');
+
+    unawaited(session.playFromHistory('fala-b'));
+    await pumpEventQueue();
+    expect(session.nowPlayingId, 'fala-b');
+
+    // A termina agora, encerrada por B ter começado.
+    player.release('fala-a');
+    await pumpEventQueue();
+
+    expect(session.nowPlayingId, 'fala-b',
+        reason: 'o fim de A não pode apagar a marca de B');
+
+    player.releaseAll();
+    await pumpEventQueue();
+    expect(session.nowPlayingId, isNull, reason: 'B terminou, agora é silêncio');
+  });
+
+
+  test('o histórico é um stream só, não um novo a cada leitura', () {
+    // A tela lê `session.messages` dentro do `build`, e o `build` roda a cada
+    // `setState` — e há um `setState` por fala baixada e por fala tocada. Um
+    // stream novo a cada leitura faz o StreamBuilder reassinar e voltar à
+    // snapshot vazia: a lista pisca, e o destaque de quem está falando some
+    // junto, bem quando uma fala nova chega.
+    expect(identical(session.messages, session.messages), isTrue);
+  });
+
+
+  test('a fala que chega no meio espera a anterior terminar', () async {
+    // Uma voz por vez, nunca sobreposta: é a primeira invariante da spec. Uma
+    // rajada de 12 s chega em três mensagens espaçadas de 5 s, que é
+    // exatamente a duração de cada segmento — a fala seguinte chega no
+    // instante em que a anterior está acabando, e é aí que a serialização é
+    // testada de verdade.
+    player.holdAll = true;
+
+    await session.ingest(message('seg-um'));
+    await pumpEventQueue();
+    expect(player.played, hasLength(1), reason: 'a primeira começou');
+
+    await session.ingest(message('seg-dois'));
+    await pumpEventQueue();
+    expect(player.played, hasLength(1),
+        reason: 'a segunda não pode começar com a primeira ainda tocando');
+
+    player.release('seg-um');
+    await pumpEventQueue();
+    expect(player.played, hasLength(2), reason: 'agora sim a segunda toca');
+
+    player.releaseAll();
+    await pumpEventQueue();
+  });
+
 }

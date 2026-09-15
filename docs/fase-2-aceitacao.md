@@ -64,6 +64,34 @@ O que os carimbos mostram além do pedido: os três segmentos subiram com ~5 s d
 intervalo, **enquanto o piloto ainda falava**. O segmento 0 foi ao servidor aos 5 s do
 aperto, não no momento de soltar. A captura não parou para fechar segmento.
 
+### Correção posterior: esta confirmação passou por sorte
+
+O "sem buraco nas junções" acima estava certo para aquela rodada e **errado como
+afirmação sobre o sistema**. Havia um defeito no caminho de reprodução que cortava
+toda fala a partir da segunda, e ele só aparece quando dois segmentos estão na fila
+ao mesmo tempo.
+
+`SegmentPlayer.play` esperava o `play()` do `just_audio`, que **devolve na hora
+quando o player já está com `playing == true`** — e ele continua assim depois que a
+faixa termina, porque o pacote não desliga a flag no fim. Só a primeira fala de cada
+sessão era esperada de verdade. Da segunda em diante a `PlaybackQueue` dava a fala
+por encerrada em dezenas de milissegundos e mandava a próxima, cujo `setFilePath`
+cortava a que estava tocando.
+
+Medido no aparelho, numa rajada de três: a primeira tocou **5,234 s**, a segunda
+**52 ms** e a terceira **73 ms**.
+
+Por que a rodada acima passou: os segmentos sobem com ~5 s de intervalo e cada um
+dura ~5 s, então é lance de moeda se o seguinte já está na fila quando o anterior
+acaba. Se não estiver, a fila drena entre as chegadas e cada fala toca sozinha, sem
+ninguém para cortá-la — que foi o que se ouviu.
+
+**A lição é sobre o instrumento, não sobre o ouvido.** "Confirmado de ouvido" era o
+único jeito de checar continuidade, e continua sendo. O que faltava era medir o
+*intervalo* entre o começo e o fim de cada reprodução, e o `trace` narrava os dois
+sem carimbar a hora. Com o carimbo, o defeito salta em uma leitura. Corrigido; o
+critério agora vale pelo motivo certo, e não pela temporização da rodada.
+
 ## 3. Modo avião em B por 20 s — **pendente**
 
 Observação lateral já obtida: ao entrar na sala às 15:20, os três segmentos publicados

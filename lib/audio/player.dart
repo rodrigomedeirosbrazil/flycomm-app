@@ -36,6 +36,25 @@ class SegmentPlayer {
   ///
   /// O próximo `setFilePath` já troca a fonte; não há o que limpar entre falas.
   Future<void> play(String filePath) async {
+    // `pause()` antes de trocar a fonte, e isto NÃO é higiene — é o que faz
+    // este método cumprir a promessa acima.
+    //
+    // O `play()` do just_audio devolve **na hora** quando o player já está com
+    // `playing == true`, e ele continua assim depois que a faixa termina: o
+    // pacote não desliga a flag no fim. Então só a primeira fala de cada
+    // sessão era esperada de verdade; da segunda em diante o `await` voltava
+    // em dezenas de milissegundos, a PlaybackQueue achava que a reprodução
+    // tinha acabado e mandava a próxima — cujo `setFilePath` cortava a que
+    // estava de fato tocando.
+    //
+    // Medido no aparelho, numa rajada de três segmentos: a primeira fala
+    // tocou 5,234 s e as duas seguintes "tocaram" em 52 ms e 73 ms. O sintoma
+    // era intermitente porque uma fala avulsa soa normal mesmo com o `await`
+    // quebrado — não há ninguém na fila para cortá-la. Só a rajada revela.
+    //
+    // `pause()` e não `stop()`: stop libera o decodificador nativo e a fala
+    // seguinte não toca (ver [interrupt]).
+    await _player.pause();
     await _player.setFilePath(filePath);
     await _player.play();
   }

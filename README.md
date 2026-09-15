@@ -44,10 +44,36 @@ APNs. Enquanto ele não entra, PTT com a tela bloqueada é recurso de Android.
 Resumindo a inversão: com a tela apagada o iPhone **ouve** e não fala, o Android
 **fala** e não ouve.
 
-O [plano de implementação](docs/superpowers/plans/2026-09-13-fase-2-app-flutter.md)
-é o documento mais útil para entender o porquê de cada decisão: ele carrega o
-contrato verificado contra o servidor real, as divergências encontradas e as
-armadilhas que só aparecem no aparelho.
+### O que o piloto alcança pela interface
+
+O app começou expondo menos do que o cliente sabia fazer. Hoje tem:
+
+- **Configuração** — o nome de exibição, que antes era sorteado no arranque e
+  permanente; mais o diagnóstico de campo (servidor, desvio do relógio, os
+  orçamentos do `GET /config`) e o log de botões de mídia.
+- **Salas** — criar, entrar por código, renomear, sair, e ler o código de
+  convite de dentro da sala, que é onde se está quando perguntam por ele pelo
+  rádio.
+- **Quem está ouvindo** — a barra de presença abre a lista dos pilotos, com a
+  distinção que importa: quem não está na presença não te ouve ao vivo. Com o
+  próprio socket caído ela diz que **não sabe**, em vez de mostrar a lista
+  velha.
+- **Quem está falando** — o card da fala em curso se destaca inteiro.
+
+Ver a [spec](docs/superpowers/specs/2026-09-14-config-e-usabilidade-design.md) e
+o [plano](docs/superpowers/plans/2026-09-14-config-e-usabilidade.md) desta
+rodada. Nada ali mudou o contrato com o servidor.
+
+### Os documentos que explicam o porquê
+
+O [plano da Fase 2](docs/superpowers/plans/2026-09-13-fase-2-app-flutter.md) é o
+mais útil para entender cada decisão: ele carrega o contrato verificado contra o
+servidor real, as divergências encontradas e as armadilhas que só aparecem no
+aparelho.
+
+A [aceitação](docs/fase-2-aceitacao.md) registra o que foi medido — inclusive um
+critério que passou por sorte de temporização e foi corrigido depois, quando o
+defeito que ele deveria ter pego apareceu em voo.
 
 ## Como rodar
 
