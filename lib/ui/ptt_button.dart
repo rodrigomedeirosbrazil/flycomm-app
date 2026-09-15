@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Apertar e segurar. Grande de propósito: é operado em voo, às vezes de luva.
 class PttButton extends StatefulWidget {
@@ -22,12 +23,17 @@ class _PttButtonState extends State<PttButton> {
 
   Future<void> _press() async {
     if (!widget.enabled || _held) return;
+    // Seguro porque `pressPtt` toca o aviso de "pode falar" **até o fim**
+    // antes de abrir a captura: o motor de vibração para antes de o microfone
+    // existir, e não entra na gravação.
+    await HapticFeedback.heavyImpact();
     setState(() => _held = true);
     await widget.onPress();
   }
 
   Future<void> _release() async {
     if (!_held) return;
+    await HapticFeedback.lightImpact();
     setState(() => _held = false);
     await widget.onRelease();
   }
