@@ -1,0 +1,128 @@
+# Monta o APK Android de uma tag de release e publica no GitHub Releases.
+#
+# iOS fica de fora de propósito, como no fly-app: sem certificado de
+# distribuição não há build headless assinável, e a instalação expiraria em
+# 7 dias. iOS sai do Mac, pelo cabo.
+#
+# ATENÇÃO — assinatura: este repo ainda não tem keystore de release.
+# android/app/build.gradle.kts assina o release com a chave de DEBUG. O APK
+# instala e roda, mas não é a mesma identidade do fly-app, e trocar para uma
+# chave de verdade depois exige desinstalar a versão anterior do aparelho
+# (o que apaga o histórico local — ele é permanente e só existe no aparelho).
+name: release
+
+on:
+  push:
+    # Tags são AAAA-MM-DD.N — 2026-09-15.1. O padrão é estrito de propósito:
+    # tag digitada errada não pode virar build com versionCode errado.
+    tags:
+      - '2[0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].[0-9]*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necessário para criar o Release
+
+env:
+  FLUTTER_VERSION: '3.47.3'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- versão -------------------------------------------------------
+      # versionName é a tag literal. versionCode precisa ser inteiro sempre
+      # crescente, então a tag vira AAAAMMDDNN — abaixo do teto de
+      # 2_100_000_000 do Android até 2100, e com N limitado a 99 por dia.
+      - name: Derivar versão da tag
+        id: version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          DATE="${TAG%.*}"
+          N="${TAG##*.}"
+          if [ "$N" -gt 99 ]; then
+            echo "::error::N=$N passa de 99; versionCode deixaria de crescer."
+            exit 1
+          fi
+          CODE="$(echo "$DATE" | tr -d '-')$(printf '%02d' "$N")"
+          echo "name=$TAG"  >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "versionName=$TAG  versionCode=$CODE"
+
+      # --- toolchain ----------------------------------------------------
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # compileSdk vem do Flutter (37 com minor 0). O Google publica essa
+      # plataforma só como `platforms;android-37.0`, e ela não vem no SDK
+      # pré-instalado do runner.
+      - uses: android-actions/setup-android@v3
+      - name: Instalar a plataforma Android 37.0
+        run: sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Fixado, não `stable`: um release novo do Flutter não pode mudar
+          # o que um re-run de uma tag antiga produz.
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # --- portões ------------------------------------------------------
+      - run: flutter analyze
+
+      # test/integration/ fala com o flycomm-server de verdade (docker compose
+      # com seed) e não roda no runner. O resto é onde mora a correção.
+      - name: Testes de unidade
+        run: flutter test test/audio test/history test/room test/ui
+
+      # --- build --------------------------------------------------------
+      # Um APK universal, não --split-per-abi: isso vai na mão para o piloto,
+      # e três arquivos são três chances de instalar o errado.
+      - name: Build do APK de release
+        run: |
+          flutter build apk --release \
+            --build-name='${{ steps.version.outputs.name }}' \
+            --build-number='${{ steps.version.outputs.code }}'
+
+      - name: Conferir a versão que chegou no manifest
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_SDK_ROOT/build-tools" -name aapt2 | sort -V | tail -1)"
+          "$AAPT" dump badging build/app/outputs/flutter-apk/app-release.apk | head -1
+
+      # --- publicação ---------------------------------------------------
+      - name: Preparar o artefato
+        id: artifact
+        run: |
+          set -euo pipefail
+          OUT="flycomm-${{ steps.version.outputs.name }}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$OUT"
+          echo "sha256=$(sha256sum "$OUT" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.path }}
+          name: ${{ steps.version.outputs.name }}
+          body: |
+            APK Android da sala de pilotos, para instalar direto no aparelho.
+
+            Assinado com a chave de **debug** — ainda não há keystore de
+            release neste repo.
+
+            Instalação por cima de uma versão anterior (preserva o histórico):
+
+                adb install -r ${{ steps.artifact.outputs.path }}
+
+            | | |
+            |---|---|
+            | versionName | `${{ steps.version.outputs.name }}` |
+            | versionCode | `${{ steps.version.outputs.code }}` |
+            | SHA-256 | `${{ steps.artifact.outputs.sha256 }}` |
