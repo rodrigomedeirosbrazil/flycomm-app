@@ -60,7 +60,12 @@ jobs:
       # compileSdk vem do Flutter (37 com minor 0). O Google publica essa
       # plataforma só como `platforms;android-37.0`, e ela não vem no SDK
       # pré-instalado do runner.
+      # packages vazio de propósito: o default da action instala o pacote
+      # legado `tools`, que o Google já removeu do repositório — e a action
+      # morre antes de chegar no build.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
       - name: Instalar a plataforma Android 37.0
         run: sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0"
 
