@@ -24,6 +24,17 @@ sem aspas.
 flutter run --dart-define=FLYCOMM_HTTP=http://SEU_IP:8000 --dart-define=FLYCOMM_WS_HOST=SEU_IP --dart-define=FLYCOMM_WS_PORT=8080 --dart-define=FLYCOMM_WS_KEY=flycomm-local-key
 ```
 
+**`flutter analyze` não sai limpo, e isso é o esperado.** A base tem **10
+`info`** pré-existentes — `prefer_initializing_formals`, `use_null_aware_elements`
+e um `unnecessary_underscores` — em arquivos que este plano não toca. O critério
+de cada tarefa é **não somar nenhuma issue nova**, nunca "zero issues". Não
+conserte esses lints de passagem: eles são ruído alheio ao trabalho e inflam o
+diff de revisão.
+
+```bash
+flutter analyze 2>&1 | tail -3   # deve dizer "10 issues found."
+```
+
 **`flutter analyze` limpo e testes passando não provam que o app monta.** Os
 defeitos mais caros desta base apareceram só no aparelho. As tarefas de widget
 deste plano terminam em `flutter analyze` + commit, e a verificação de verdade é
@@ -118,7 +129,8 @@ esse uso funcionando sem edição.
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 5: commit**
 
@@ -318,7 +330,8 @@ E troque o `appBar:` do `Scaffold` por:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir no aparelho**
 
@@ -462,7 +475,8 @@ O campo `_cues` continua existindo — ele é descartado no `dispose` e passado 
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!` Se aparecer `unused_field` para `_cues`, você
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa. Se aparecer `unused_field` para `_cues`, você
 apagou demais: ele ainda vai para `RoomSession(cues: cues)` e para o `dispose`.
 
 - [ ] **Step 4: commit**
@@ -540,7 +554,8 @@ troque `inputFormatters: [_FrequencyInput()]` por
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: commit**
 
@@ -670,7 +685,8 @@ entra, então entrar é a ação frequente e fica no alvo grande.
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir no aparelho**
 
@@ -869,7 +885,8 @@ class _Refreshable extends StatelessWidget {
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir no aparelho**
 
@@ -1059,7 +1076,8 @@ No `actions:` da `AppBar`, depois do `TextButton.icon` da frequência:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir com dois aparelhos**
 
@@ -1375,7 +1393,8 @@ Em `lib/room/room_session.dart`, junto de `Stream<RoomPresence> get presence`:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze && flutter test test/room
 ```
 
-Esperado: `No issues found!` e todos os testes passando.
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa. e todos os testes passando.
 
 - [ ] **Step 4: commit**
 
@@ -1588,7 +1607,8 @@ todo o `bottom: PreferredSize(...)` da `AppBar` por:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir com dois aparelhos**
 
@@ -2035,7 +2055,8 @@ E troque o `Padding` do `PttButton` no fim do `Column` por:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 5: conferir com dois aparelhos**
 
@@ -2100,7 +2121,8 @@ E nos dois métodos:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 3: conferir no aparelho**
 
@@ -2199,7 +2221,8 @@ Troque o bloco `if (!_micGranted)` do `Column` por:
 cd /Users/rodrigo/dev/flycomm-app && flutter analyze
 ```
 
-Esperado: `No issues found!`
+Esperado: **as mesmas 10 issues de antes, nenhuma nova**. Veja a nota de
+baseline em "Antes de começar" — não conserte lint fora do escopo desta tarefa.
 
 - [ ] **Step 4: conferir no aparelho**
 
