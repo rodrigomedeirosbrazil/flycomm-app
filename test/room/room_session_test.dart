@@ -261,26 +261,35 @@ void main() {
   });
 
 
-  test('o PTT acionado no meio interrompe a repetição da rajada', () async {
-    // Meio-duplex vale para a repetição como vale para a fila: uma voz por vez,
-    // e enquanto o PTT está acionado nada toca. Parar não é erro — o piloto
-    // interrompeu de propósito, porque quis falar.
-    await session.ingest(message('seg-um'));
-    await session.ingest(message('seg-dois'));
+
+
+  test('anuncia quem está tocando, e o silêncio depois', () async {
+    final announced = <String?>[];
+    final watching = session.nowPlaying.listen(announced.add);
+
+    await session.ingest(message('m-1'));
     await pumpEventQueue();
-    player.played.clear();
+    await watching.cancel();
 
-    // Aperta o PTT enquanto o primeiro segmento toca. `pressPtt` marca a fila
-    // como segura na primeira linha, de forma síncrona, então o laço da
-    // repetição já vê isso na volta seguinte.
-    player.onPlay = () => unawaited(session.pressPtt());
+    expect(announced, ['m-1', null]);
+  });
 
-    final problem = await session.replayBurst(['seg-um', 'seg-dois']);
+  test('a marca de quem está tocando sai mesmo quando a reprodução falha',
+      () async {
+    // O `finally` do anúncio não é zelo: a reprodução é interrompida de
+    // propósito — PTT acionado, ligação entrando, fone desconectado. Se a
+    // marca não saísse nesses caminhos, a tela ficaria dizendo que alguém fala
+    // com o rádio mudo, que é pior que não dizer nada.
+    player.onPlay = () => throw StateError('sessão de áudio tomada');
 
-    expect(problem, isNull, reason: 'interromper de propósito não é falha');
-    expect(player.played, hasLength(1),
-        reason: 'o segundo segmento não pode tocar com o microfone aberto');
-    expect(player.played.single, contains('seg-um'));
+    final announced = <String?>[];
+    final watching = session.nowPlaying.listen(announced.add);
+
+    await session.ingest(message('m-1'));
+    await pumpEventQueue();
+    await watching.cancel();
+
+    expect(announced.last, isNull, reason: 'o silêncio precisa ser anunciado');
   });
 
 }

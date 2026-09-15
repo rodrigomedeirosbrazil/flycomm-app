@@ -83,6 +83,9 @@ class RoomSession {
   final _roomChanges = StreamController<Room>.broadcast();
   final _gaps = StreamController<DateTime>.broadcast();
   final _playbackProblems = StreamController<String?>.broadcast();
+  final _nowPlaying = StreamController<String?>.broadcast();
+
+  String? _nowPlayingId;
 
   late Room _room;
 
@@ -100,6 +103,22 @@ class RoomSession {
   /// sinal de recuperação, ele continuaria mostrando um erro já resolvido — e
   /// foi exatamente o que aconteceu em bancada.
   Stream<String?> get playbackProblems => _playbackProblems.stream;
+
+  /// Qual fala está saindo pelo alto-falante agora, ou `null` no silêncio.
+  ///
+  /// A fila é FIFO estrita e toca uma voz por vez — mas até aqui a tela não
+  /// dizia **qual**. Numa sala de rádio isso é a metade que falta: o piloto
+  /// ouve alguém falando e não tem como saber quem, nem voltar naquela fala
+  /// depois, porque não sabe qual linha do histórico era.
+  ///
+  /// Vale para os dois caminhos de reprodução, a fila e o toque no histórico:
+  /// os dois passam por [_whilePlaying]. Se valesse só para um, a marca
+  /// mentiria justamente quando o piloto fosse conferir.
+  Stream<String?> get nowPlaying => _nowPlaying.stream;
+
+  /// O valor atual, para quem assina depois de a reprodução já ter começado —
+  /// mesma razão de `presenceNow`.
+  String? get nowPlayingId => _nowPlayingId;
 
   Stream<List<LocalMessage>> get messages => history.watchRoom(room.id);
   Stream<RoomPresence> get presence => reverb.presence;
@@ -279,6 +298,22 @@ class RoomSession {
   /// assim que uma fala tocada no alto-falante errado passou por "não tocou".
   /// Quando não dá para tocar, a mensagem vira atrasada: continua ouvível por
   /// toque, e o piloto vê que algo aconteceu.
+  /// Anuncia quem está tocando enquanto [body] roda, e o silêncio depois.
+  ///
+  /// O `finally` não é zelo: a reprodução é interrompida de propósito — PTT
+  /// acionado, ligação entrando —, e se a marca não saísse nesses caminhos a
+  /// tela ficaria dizendo que alguém fala enquanto o rádio está mudo.
+  Future<void> _whilePlaying(String messageId, Future<void> Function() body) async {
+    _nowPlayingId = messageId;
+    if (!_nowPlaying.isClosed) _nowPlaying.add(messageId);
+    try {
+      await body();
+    } finally {
+      _nowPlayingId = null;
+      if (!_nowPlaying.isClosed) _nowPlaying.add(null);
+    }
+  }
+
   Future<void> _playFromStore(QueuedItem item) async {
     final tag = _tag(item.messageId);
     trace('fila: vez de $tag, tem audio=${audioStore.has(item.messageId)}');
@@ -291,7 +326,10 @@ class RoomSession {
 
     try {
       trace('tocando $tag');
-      await player.play(audioStore.pathFor(item.messageId));
+      await _whilePlaying(
+        item.messageId,
+        () => player.play(audioStore.pathFor(item.messageId)),
+      );
       trace('terminou $tag');
       await history.markPlayed(item.messageId);
       _playbackProblems.add(null);
@@ -324,7 +362,10 @@ class RoomSession {
     }
 
     try {
-      await player.play(audioStore.pathFor(messageId));
+      await _whilePlaying(
+        messageId,
+        () => player.play(audioStore.pathFor(messageId)),
+      );
       // Ouvida por toque conta como ouvida: a pergunta que a marca responde é
       // "já escutei isto?", não "a fila tocou isto?".
       await history.markHeard(messageId);
@@ -334,21 +375,6 @@ class RoomSession {
     }
   }
 
-  /// Toca uma rajada inteira, em ordem, e **para no meio se o PTT for
-  /// acionado**: o meio-duplex vale para a repetição como vale para a fila.
-  ///
-  /// Parar não é erro e não devolve razão — o piloto interrompeu de propósito,
-  /// porque quis falar.
-  Future<String?> replayBurst(List<String> messageIds) async {
-    for (final id in messageIds) {
-      if (_queue.pttHeld) return null;
-
-      final problem = await playFromHistory(id);
-      if (problem != null) return problem;
-    }
-
-    return null;
-  }
 
   /// Para o que estiver tocando, sem mexer na fila. Usado quando o sistema
   /// tira a sessão de áudio do app — ligação entrando, fone desconectado.
@@ -429,6 +455,7 @@ class RoomSession {
     await _roomChanges.close();
     await _gaps.close();
     await _playbackProblems.close();
+    await _nowPlaying.close();
   }
 }
 

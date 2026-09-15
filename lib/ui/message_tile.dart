@@ -28,11 +28,18 @@ class MessageTile extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMine,
+    required this.isPlaying,
     required this.onPlay,
   });
 
   final LocalMessage message;
   final bool isMine;
+
+  /// Esta é a fala que está saindo pelo alto-falante agora.
+  ///
+  /// A fila toca uma voz por vez e a tela não dizia qual: o piloto ouvia
+  /// alguém falando sem saber de quem era, nem em que linha voltar depois.
+  final bool isPlaying;
   final Future<void> Function() onPlay;
 
   @override
@@ -81,7 +88,13 @@ class MessageTile extends StatelessWidget {
     // um alvo de 24 px é inoperável com luva, em voo.
     return ListTile(
       onTap: onPlay,
-      leading: Icon(icon, color: color),
+      // Fundo inteiro, e não só o ícone: em voo a tela é olhada de relance, e
+      // um alvo de 24 px não se distingue à distância de um braço.
+      tileColor: isPlaying ? colors.primaryContainer : null,
+      leading: Icon(
+        isPlaying ? Icons.volume_up : icon,
+        color: isPlaying ? colors.onPrimaryContainer : color,
+      ),
       title: Text('$author · $seconds s'),
       subtitle: Row(
         children: [

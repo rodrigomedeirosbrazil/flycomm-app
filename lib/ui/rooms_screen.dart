@@ -28,6 +28,19 @@ class _RoomsScreenState extends State<RoomsScreen> {
         _rooms = AppScope.of(context).rooms.mine();
       });
 
+  /// Abre a sala e **recarrega a lista ao voltar**.
+  ///
+  /// Renomear a sala e mudar a frequência acontecem lá dentro, e esta lista é
+  /// um `Future` resolvido uma vez: sem recarregar, ela segue mostrando o nome
+  /// velho até o app reiniciar. O `room.updated` chega para quem está dentro
+  /// da sala; esta tela não está.
+  Future<void> _openRoom(Room room) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => RoomScreen(room: room)),
+    );
+    if (mounted) _reload();
+  }
+
   Future<void> _joinByCode() async {
     final controller = TextEditingController();
 
@@ -68,9 +81,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       if (!mounted) return;
       setState(() => _joining = false);
       _reload();
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => RoomScreen(room: room)),
-      );
+      await _openRoom(room);
     } catch (error) {
       if (!mounted) return;
       setState(() => _joining = false);
@@ -151,9 +162,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       final room = await scope.rooms.create(name: chosen, frequencyHz: hz);
       if (!mounted) return;
       _reload();
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => RoomScreen(room: room)),
-      );
+      await _openRoom(room);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -245,11 +254,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       '${formatFrequency(room.frequencyHz)}',
                     ),
                     trailing: Text(room.inviteCode),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => RoomScreen(room: room),
-                      ),
-                    ),
+                    onTap: () => _openRoom(room),
                     // O código é ditado em voz alta, às vezes pelo próprio
                     // rádio. Copiar tira o erro de transcrição do caminho.
                     onLongPress: () async {
