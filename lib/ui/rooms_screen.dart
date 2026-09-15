@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../room/models.dart';
 import 'app_scope.dart';
+import 'frequency.dart';
 import 'room_screen.dart';
 import 'settings_screen.dart';
 
@@ -133,11 +134,4 @@ class _RoomsScreenState extends State<RoomsScreen> {
           },
         ),
       );
-}
-
-/// A frequência é guardada como inteiro em Hz e só vira texto aqui.
-/// Nula é um estado honesto: "ainda não combinamos a frequência".
-String formatFrequency(int? hz) {
-  if (hz == null) return 'sem frequência';
-  return '${(hz / 1000000).toStringAsFixed(3)} MHz';
 }

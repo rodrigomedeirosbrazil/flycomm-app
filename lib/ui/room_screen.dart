@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/cues.dart';
@@ -17,9 +16,9 @@ import '../room/reverb_client.dart';
 import '../room/room_session.dart';
 import '../env.dart';
 import 'app_scope.dart';
+import 'frequency.dart';
 import 'message_tile.dart';
 import 'ptt_button.dart';
-import 'rooms_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -221,7 +220,7 @@ class _RoomScreenState extends State<RoomScreen> {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [_FrequencyInput()],
+          inputFormatters: [FrequencyInput()],
           decoration: const InputDecoration(
             suffixText: 'MHz',
             hintText: '145,550',
@@ -386,25 +385,6 @@ class _RoomScreenState extends State<RoomScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Seis dígitos bastam para qualquer frequência das faixas do rádio, escrita
-/// como MHz com decimais (145,550) ou como kHz (145550). O que passa disso é
-/// ignorado em vez de recusado: no ar, o piloto não vai ler mensagem de erro.
-class _FrequencyInput extends TextInputFormatter {
-  static final _allowed = RegExp(r'^[0-9]*[.,]?[0-9]*$');
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue previous,
-    TextEditingValue next,
-  ) {
-    if (!_allowed.hasMatch(next.text)) return previous;
-
-    final digits = next.text.replaceAll(RegExp('[^0-9]'), '');
-
-    return digits.length > 6 ? previous : next;
   }
 }
 
