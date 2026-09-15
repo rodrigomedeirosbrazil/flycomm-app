@@ -97,6 +97,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scope = AppScope.of(context);
     final text = Theme.of(context).textTheme;
     final colors = Theme.of(context).colorScheme;
 
@@ -166,19 +167,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Row('Servidor', Env.httpBase),
           _Row(
             'Relógio',
-            AppScope.of(context).clock.isSynced
+            scope.clock.isSynced
                 ? 'sincronizado, desvio de '
-                    '${AppScope.of(context).clock.skew.inMilliseconds} ms'
+                    '${scope.clock.skew.inMilliseconds} ms'
                 : 'ainda não sincronizado',
           ),
           const SizedBox(height: 12),
           Text('Orçamentos de tempo', style: text.labelLarge),
           const SizedBox(height: 4),
-          _Row('Toca sozinho até', _budget(AppScope.of(context).budgets.playbackDeadline)),
-          _Row('Insiste em subir até', _budget(AppScope.of(context).budgets.deliveryDeadline)),
-          _Row('Segmento', _budget(AppScope.of(context).budgets.segmentMax)),
-          _Row('Recuperação olha', _budget(AppScope.of(context).budgets.catchupWindow)),
-          _Row('Áudio vive no servidor', _budget(AppScope.of(context).budgets.blobTtl)),
+          _Row('Toca sozinho até', _budget(scope.budgets.playbackDeadline)),
+          _Row('Insiste em subir até', _budget(scope.budgets.deliveryDeadline)),
+          _Row('Segmento', _budget(scope.budgets.segmentMax)),
+          _Row('Recuperação olha', _budget(scope.budgets.catchupWindow)),
+          _Row('Áudio vive no servidor', _budget(scope.budgets.blobTtl)),
           const SizedBox(height: 20),
           OutlinedButton.icon(
             onPressed: _showMediaButtonLog,
