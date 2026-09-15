@@ -208,7 +208,7 @@ class RoomSession {
 
   /// Baixa e guarda o áudio. Devolve `true` quando o arquivo fica no disco.
   Future<bool> _fetchAudio(RoomMessage message) async {
-    final tag = message.id.substring(0, 8);
+    final tag = _tag(message.id);
     trace('baixando $tag');
     try {
       final bytes = await messageApi.download(message.audioUrl);
@@ -249,7 +249,7 @@ class RoomSession {
     // aparecem em lugar nenhum quando dão errado — o desvio do relógio, a
     // idade calculada e o orçamento lido do servidor.
     trace(
-      'ingest ${message.id.substring(0, 8)} '
+      'ingest ${_tag(message.id)} '
       'falada=$spokenAt '
       'agora=${clock.now()} '
       'idade=${clock.ageOf(spokenAt).inMilliseconds}ms '
@@ -280,7 +280,7 @@ class RoomSession {
   /// Quando não dá para tocar, a mensagem vira atrasada: continua ouvível por
   /// toque, e o piloto vê que algo aconteceu.
   Future<void> _playFromStore(QueuedItem item) async {
-    final tag = item.messageId.substring(0, 8);
+    final tag = _tag(item.messageId);
     trace('fila: vez de $tag, tem audio=${audioStore.has(item.messageId)}');
 
     if (!audioStore.has(item.messageId)) {
@@ -431,3 +431,17 @@ class RoomSession {
     await _playbackProblems.close();
   }
 }
+
+/// As oito primeiras letras do id, para o rastro de depuração.
+///
+/// Existe porque `substring(0, 8)` **lança** num id mais curto que oito, e o
+/// estrago disso é desproporcional ao de um log feio: a exceção sobe até
+/// [RoomSession.ingest], que a converte em "Não deu para receber uma fala". Um
+/// erro de formatar log se disfarça de falha de rede, e a fala some do
+/// histórico junto.
+///
+/// Não morde em produção porque todo id de mensagem é um uuid gerado pelo app.
+/// É exatamente por isso que precisa de guarda: o caminho curto só é
+/// exercitado por acidente, e quando for, o sintoma vai apontar para o lugar
+/// errado.
+String _tag(String id) => id.length <= 8 ? id : id.substring(0, 8);

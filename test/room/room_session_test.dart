@@ -32,8 +32,19 @@ class _SilentRecorder implements AudioRecorder {
 /// Não toca nada. A invariante em teste é de ordem, não de som, e um teste de
 /// host nunca deveria construir um player de verdade.
 class _SilentPlayer extends SegmentPlayer {
+  /// O que foi pedido, na ordem. Uma rajada de três segmentos tocada inteira e
+  /// uma tocada pela metade só se distinguem por isto.
+  final played = <String>[];
+
+  /// Roda **dentro** de cada reprodução, que é onde o meio-duplex da repetição
+  /// precisa ser observado: entre um segmento e o próximo.
+  void Function()? onPlay;
+
   @override
-  Future<void> play(String filePath) async {}
+  Future<void> play(String filePath) async {
+    played.add(filePath);
+    onPlay?.call();
+  }
 
   @override
   Future<void> interrupt() async {}
@@ -122,11 +133,13 @@ void main() {
   late _CountingAdapter adapter;
   late Directory temp;
   late RoomSession session;
+  late _SilentPlayer player;
 
   setUp(() async {
     db = HistoryDatabase(NativeDatabase.memory());
     adapter = _CountingAdapter();
     temp = await Directory.systemTemp.createTemp('flycomm-test');
+    player = _SilentPlayer();
 
     final api = ApiClient(baseUrl: 'http://servidor');
     api.raw.httpClientAdapter = adapter;
@@ -154,7 +167,7 @@ void main() {
         segmentMax: budgets.segmentMax,
         serverNow: clock.now,
       ),
-      player: _SilentPlayer(),
+      player: player,
     );
   });
 
@@ -224,4 +237,50 @@ void main() {
     expect(problem, isNotNull);
     expect(problem, contains('PTT'));
   });
+
+  test('id curto não vira falha de recepção disfarçada', () async {
+    // O rastro de depuração corta o id em oito letras, e `substring` lança
+    // quando o id é mais curto que isso. A exceção sobe até `ingest`, que
+    // existe justamente para nada falhar em silêncio, e vira "Não deu para
+    // receber uma fala" — um erro de formatar log disfarçado de falha de rede,
+    // com a fala sumindo do histórico junto.
+    //
+    // Não morde em produção porque todo id real é um uuid, e é exatamente por
+    // isso que precisa de teste: o caminho só é exercitado por acidente.
+    final problems = <String?>[];
+    final watching = session.playbackProblems.listen(problems.add);
+
+    await session.ingest(message('curto'));
+    await pumpEventQueue();
+    await watching.cancel();
+
+    // `null` neste stream é o sinal de recuperação — "voltou a funcionar" —,
+    // não um problema. O que não pode aparecer é razão nenhuma.
+    expect(problems.whereType<String>(), isEmpty);
+    expect(await session.history.byId('curto'), isNotNull);
+  });
+
+
+  test('o PTT acionado no meio interrompe a repetição da rajada', () async {
+    // Meio-duplex vale para a repetição como vale para a fila: uma voz por vez,
+    // e enquanto o PTT está acionado nada toca. Parar não é erro — o piloto
+    // interrompeu de propósito, porque quis falar.
+    await session.ingest(message('seg-um'));
+    await session.ingest(message('seg-dois'));
+    await pumpEventQueue();
+    player.played.clear();
+
+    // Aperta o PTT enquanto o primeiro segmento toca. `pressPtt` marca a fila
+    // como segura na primeira linha, de forma síncrona, então o laço da
+    // repetição já vê isso na volta seguinte.
+    player.onPlay = () => unawaited(session.pressPtt());
+
+    final problem = await session.replayBurst(['seg-um', 'seg-dois']);
+
+    expect(problem, isNull, reason: 'interromper de propósito não é falha');
+    expect(player.played, hasLength(1),
+        reason: 'o segundo segmento não pode tocar com o microfone aberto');
+    expect(player.played.single, contains('seg-um'));
+  });
+
 }

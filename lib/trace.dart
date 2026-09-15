@@ -1,8 +1,14 @@
 import 'package:flutter/foundation.dart';
 
 /// Narra o caminho de uma fala recebida: ingest → download → disco → fila →
-/// reprodução. Só em debug — o `assert` some inteiro no release, argumento
-/// incluído, então o custo em produção é zero.
+/// reprodução. A impressão é só em debug: o `assert` some no release.
+///
+/// **O argumento não some.** `trace` recebe uma `String` já pronta, então a
+/// interpolação é avaliada na chamada, em release também — só o `debugPrint`
+/// é que desaparece. O custo em produção é o de montar as strings, que é
+/// pequeno mas não é zero, e o que quer que a interpolação faça acontece de
+/// verdade: foi assim que um `substring` num id curto virou "não deu para
+/// receber uma fala".
 ///
 /// Existe porque o sintoma e a causa ficam longe um do outro neste caminho.
 /// "Todas as mensagens chegam atrasadas e não tocam" foi, em momentos
