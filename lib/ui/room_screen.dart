@@ -20,6 +20,7 @@ import 'app_scope.dart';
 import 'frequency.dart';
 import 'message_tile.dart';
 import 'ptt_button.dart';
+import 'roster_sheet.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -449,23 +450,7 @@ class _RoomScreenState extends State<RoomScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(28),
-          child: StreamBuilder<RoomPresence>(
-            stream: session.presence,
-            builder: (context, snapshot) {
-              final names = snapshot.data?.members
-                      .map((m) => m.displayName)
-                      .join(', ') ??
-                  'conectando…';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6, left: 16, right: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Na sala: $names',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-              );
-            },
-          ),
+          child: PresenceBar(session: session, me: scope.userId),
         ),
       ),
       body: Column(
