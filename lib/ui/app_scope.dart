@@ -55,6 +55,11 @@ class AppScope extends InheritedWidget {
   /// outro, que é exatamente o caso para o qual o Flutter oferece
   /// `ValueNotifier`. O app não usa biblioteca de gerência de estado e não
   /// precisa começar a usar por um campo.
+  ///
+  /// Quem precisa **reagir** à troca escuta o notifier — `ValueListenableBuilder`
+  /// —, nunca `AppScope.of(context)`: `updateShouldNotify` devolve `false` e o
+  /// widget do escopo nunca é recriado, então mudar `user.value` não reconstrói
+  /// dependente nenhum.
   final ValueNotifier<AuthenticatedUser> user;
 
   int get userId => user.value.id;
