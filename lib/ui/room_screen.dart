@@ -17,7 +17,6 @@ import '../room/reverb_client.dart';
 import '../room/room_session.dart';
 import '../env.dart';
 import 'app_scope.dart';
-import 'media_button_log.dart';
 import 'message_tile.dart';
 import 'ptt_button.dart';
 import 'rooms_screen.dart';
@@ -174,17 +173,6 @@ class _RoomScreenState extends State<RoomScreen> {
     return 'Não deu para abrir o microfone: $error';
   }
 
-  void _showMediaButtonLog() {
-    final buttons = AppScope.of(context).mediaButtons;
-    final cues = _cues;
-
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => MediaButtonLog(handler: buttons, cues: cues),
-    );
-  }
-
   @override
   void dispose() {
     _commands?.cancel();
@@ -313,11 +301,6 @@ class _RoomScreenState extends State<RoomScreen> {
       appBar: AppBar(
         title: Text(session.current.name),
         actions: [
-          IconButton(
-            onPressed: _showMediaButtonLog,
-            icon: const Icon(Icons.headset_mic_outlined),
-            tooltip: 'Comandos de mídia recebidos',
-          ),
           TextButton.icon(
             onPressed: _editFrequency,
             icon: const Icon(Icons.radio),

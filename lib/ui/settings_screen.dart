@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../env.dart';
 import 'app_scope.dart';
+import 'media_button_log.dart';
 
 /// A configuração do piloto.
 ///
@@ -71,6 +73,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Os orçamentos vêm de GET /config e nunca de constante no código. Quando
+  /// uma fala é descartada por vencida, o prazo que a descartou não está em
+  /// nenhum outro lugar da interface.
+  static String _budget(Duration value) {
+    final seconds = value.inMilliseconds / 1000;
+    if (seconds >= 60) return '${(seconds / 60).toStringAsFixed(0)} min';
+    return '${seconds.toStringAsFixed(seconds % 1 == 0 ? 0 : 1)} s';
+  }
+
+  void _showMediaButtonLog() {
+    final buttons = AppScope.of(context).mediaButtons;
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      // Sem `cues`: a latência de saída medida só existe onde o tom foi
+      // montado, que é a tela da sala. O log dos comandos, que é a pergunta
+      // que importa aqui, não depende dela.
+      builder: (context) => MediaButtonLog(handler: buttons),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -134,8 +158,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text('Diagnóstico', style: text.titleMedium),
+          const SizedBox(height: 12),
+          _Row('Servidor', Env.httpBase),
+          _Row(
+            'Relógio',
+            AppScope.of(context).clock.isSynced
+                ? 'sincronizado, desvio de '
+                    '${AppScope.of(context).clock.skew.inMilliseconds} ms'
+                : 'ainda não sincronizado',
+          ),
+          const SizedBox(height: 12),
+          Text('Orçamentos de tempo', style: text.labelLarge),
+          const SizedBox(height: 4),
+          _Row('Toca sozinho até', _budget(AppScope.of(context).budgets.playbackDeadline)),
+          _Row('Insiste em subir até', _budget(AppScope.of(context).budgets.deliveryDeadline)),
+          _Row('Segmento', _budget(AppScope.of(context).budgets.segmentMax)),
+          _Row('Recuperação olha', _budget(AppScope.of(context).budgets.catchupWindow)),
+          _Row('Áudio vive no servidor', _budget(AppScope.of(context).budgets.blobTtl)),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: _showMediaButtonLog,
+            icon: const Icon(Icons.headset_mic_outlined),
+            label: const Text('Comandos de mídia recebidos'),
+          ),
         ],
       ),
     );
   }
+}
+
+/// Rótulo à esquerda, valor à direita. Só diagnóstico usa.
+class _Row extends StatelessWidget {
+  const _Row(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(label)),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: Theme.of(context).colorScheme.outline),
+              ),
+            ),
+          ],
+        ),
+      );
 }
