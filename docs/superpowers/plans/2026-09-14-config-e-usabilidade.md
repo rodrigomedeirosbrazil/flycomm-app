@@ -1068,7 +1068,13 @@ No `actions:` da `AppBar`, depois do `TextButton.icon` da frequência:
           ),
 ```
 
-`package:flutter/services.dart` já está importado neste arquivo.
+**Atenção ao import:** a Task 4 removeu `import 'package:flutter/services.dart';`
+deste arquivo — ele tinha ficado sem uso quando o `_FrequencyInput` mudou de
+casa. `Clipboard` vem de lá, então **adicione o import de volta**:
+
+```dart
+import 'package:flutter/services.dart';
+```
 
 - [ ] **Step 3: analisar**
 
