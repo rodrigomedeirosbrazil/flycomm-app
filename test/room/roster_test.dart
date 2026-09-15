@@ -76,15 +76,19 @@ void main() {
     });
 
     test('ordena por nome dentro de cada grupo, sem depender de maiúscula', () {
+      // 'Zeca' e 'ana' de propósito: por código UTF-16 'Z' (0x5A) vem antes de
+      // 'a' (0x61), então a ordenação ingênua poria Zeca na frente. Com
+      // ['zeca', 'Ana', 'bruno'] — o fixture anterior — os dois critérios dão o
+      // mesmo resultado, e o teste passaria mesmo sem o toLowerCase.
       final roster = Roster.from(
-        known: [pilot(1, 'zeca'), pilot(2, 'Ana'), pilot(3, 'bruno')],
-        present: [pilot(1, 'zeca'), pilot(2, 'Ana'), pilot(3, 'bruno')],
+        known: [pilot(1, 'Zeca'), pilot(2, 'ana'), pilot(3, 'bruno')],
+        present: [pilot(1, 'Zeca'), pilot(2, 'ana'), pilot(3, 'bruno')],
         connected: true,
         me: 2,
       );
 
       expect(roster.entries.map((e) => e.displayName),
-          ['Ana', 'bruno', 'zeca']);
+          ['ana', 'bruno', 'Zeca']);
     });
   });
 }

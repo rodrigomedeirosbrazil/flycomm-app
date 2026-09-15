@@ -78,7 +78,10 @@ class Roster {
     });
 
     return Roster(
-      entries: entries,
+      // Imutável: o valor inteiro desta classe é ser um retrato confiável —
+      // agrupado e ordenado. Devolver a lista que acabou de ser ordenada in
+      // place deixaria quem recebe desfazer isso sem querer.
+      entries: List<RosterEntry>.unmodifiable(entries),
       listening: connected ? presentIds.length : 0,
       total: merged.length,
       certain: connected,
