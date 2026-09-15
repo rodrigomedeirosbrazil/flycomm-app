@@ -315,3 +315,29 @@ a seleção da última fala e a validação do nome rodam em `flutter test` no h
 - Compartilhar o código por `Share` do sistema. Copiar resolve, e uma
   dependência nova não se justifica por um botão
 - Busca no histórico, separadores de dia, "tocar todas as não ouvidas"
+
+---
+
+## 11. Revisão pós-implementação
+
+O que mudou entre o desenho e o que ficou de pé, e por quê. Fica aqui em vez de
+reescrever as seções acima: o raciocínio original é o que explica a decisão, e
+apagá-lo esconderia que ela foi tomada e revista.
+
+**O botão "repetir a última" (§7) foi construído e removido.** No aparelho ele
+não se sustentou: com a fala já destacada no card e o histórico a um toque, um
+botão dedicado encostado no PTT era superfície a mais para a mesma coisa.
+`lib/history/replay.dart` e `RoomSession.replayBurst` saíram junto — código
+morto é pior que código nenhum. Os critérios de §9 sobre repetir caíram com ele.
+
+**O conserto do meio-duplex em `playFromHistory` (§8) ficou**, e essa é a parte
+que importa da §7 ter existido: o defeito era independente do botão, e sem o
+botão para torná-lo provável ninguém teria ido olhar.
+
+**A barra de "tocando agora" foi construída e substituída.** O desenho não
+previa sinal nenhum de qual fala está saindo pelo alto-falante — a fila toca uma
+voz por vez e isso só existia por dentro. A primeira tentativa foi uma linha
+separada acima do PTT; em campo ela não respondeu a pergunta, que é "qual
+**destes**?". O feedback passou a ser o card inteiro: fundo, ícone, título e o
+botão de play, que vira `graphic_eq`. Duas marcas em cantos diferentes da tela
+obrigavam a compará-las.
