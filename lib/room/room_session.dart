@@ -120,7 +120,15 @@ class RoomSession {
   /// mesma razão de `presenceNow`.
   String? get nowPlayingId => _nowPlayingId;
 
-  Stream<List<LocalMessage>> get messages => history.watchRoom(room.id);
+  /// O histórico da sala, **um stream só para a vida da sessão**.
+  ///
+  /// `late final` e não getter: `watchRoom` monta uma consulta nova a cada
+  /// chamada, e a tela lê isto dentro do `build`. Como há um `setState` por
+  /// fala baixada e por fala tocada, um stream novo a cada leitura fazia o
+  /// StreamBuilder reassinar e voltar à snapshot vazia — a lista piscava, e
+  /// com ela sumia o destaque de quem estava falando, no exato instante em que
+  /// uma fala nova chegava.
+  late final Stream<List<LocalMessage>> messages = history.watchRoom(room.id);
   Stream<RoomPresence> get presence => reverb.presence;
   Stream<ReverbConnection> get connectionState => reverb.connectionState;
 

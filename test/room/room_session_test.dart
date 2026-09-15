@@ -347,4 +347,14 @@ void main() {
     expect(session.nowPlayingId, isNull, reason: 'B terminou, agora é silêncio');
   });
 
+
+  test('o histórico é um stream só, não um novo a cada leitura', () {
+    // A tela lê `session.messages` dentro do `build`, e o `build` roda a cada
+    // `setState` — e há um `setState` por fala baixada e por fala tocada. Um
+    // stream novo a cada leitura faz o StreamBuilder reassinar e voltar à
+    // snapshot vazia: a lista pisca, e o destaque de quem está falando some
+    // junto, bem quando uma fala nova chega.
+    expect(identical(session.messages, session.messages), isTrue);
+  });
+
 }
