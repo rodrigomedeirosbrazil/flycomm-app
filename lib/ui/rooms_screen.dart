@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../room/models.dart';
 import 'app_scope.dart';
 import 'room_screen.dart';
+import 'settings_screen.dart';
 
 class RoomsScreen extends StatefulWidget {
   const RoomsScreen({super.key});
@@ -71,7 +72,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Minhas salas')),
+        appBar: AppBar(
+          title: const Text('Minhas salas'),
+          actions: [
+            IconButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+              ),
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Configuração',
+            ),
+          ],
+        ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _joinByCode,
           icon: const Icon(Icons.qr_code),
