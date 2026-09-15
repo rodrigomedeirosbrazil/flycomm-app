@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/cues.dart';
@@ -266,6 +267,133 @@ class _RoomScreenState extends State<RoomScreen> {
     // é assim que ela chega em todo mundo sem recarregar.
   }
 
+  Future<void> _renameRoom() async {
+    final session = _session!;
+    final scope = AppScope.of(context);
+    final controller = TextEditingController(text: session.current.name);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renomear sala'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Nome'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
+    final name = controller.text.trim();
+    controller.dispose();
+
+    if (confirmed != true || name.isEmpty) return;
+
+    // Sem setState: a mudança volta por room.updated e chega em todo mundo sem
+    // recarregar, do mesmo jeito que a frequência já faz.
+    await scope.rooms.update(session.current.id, name: name);
+  }
+
+  /// O código em fonte grande e monoespaçada porque ele é **ditado em voz
+  /// alta**, às vezes pelo próprio rádio — é a mesma razão pela qual o
+  /// alfabeto dele não tem 0/O nem 1/I.
+  Future<void> _showInviteCode() async {
+    final code = _session!.current.inviteCode;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Código de convite'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(
+              code,
+              style: const TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Quem digitar isto entra na sala. Vale em minúscula, sem hífen '
+              'e sem o FLY.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: code));
+              if (context.mounted) Navigator.pop(context);
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('Copiar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A confirmação diz a verdade inteira, inclusive a parte tranquilizadora: o
+  /// histórico é 100% local e permanente, e sair não o apaga. Uma confirmação
+  /// que exagera o estrago treina o piloto a não ler as próximas.
+  Future<void> _leaveRoom() async {
+    final session = _session!;
+    final scope = AppScope.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Sair de ${session.current.name}?'),
+        content: const Text(
+          'Você para de receber as falas desta sala. O histórico deste voo '
+          'continua no aparelho. Para voltar, precisa do código de convite de '
+          'novo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await scope.rooms.leave(session.current.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _lastProblem = 'Não deu para sair: $error');
+    }
+  }
+
   /// Toca e, se não der, diz por quê. Silêncio sem explicação é
   /// indistinguível de app quebrado.
   Future<void> _play(RoomSession session, String messageId) async {
@@ -304,6 +432,19 @@ class _RoomScreenState extends State<RoomScreen> {
             onPressed: _editFrequency,
             icon: const Icon(Icons.radio),
             label: Text(formatFrequency(session.current.frequencyHz)),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) => switch (value) {
+              'rename' => _renameRoom(),
+              'code' => _showInviteCode(),
+              'leave' => _leaveRoom(),
+              _ => null,
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'rename', child: Text('Renomear sala')),
+              PopupMenuItem(value: 'code', child: Text('Código de convite')),
+              PopupMenuItem(value: 'leave', child: Text('Sair da sala')),
+            ],
           ),
         ],
         bottom: PreferredSize(
