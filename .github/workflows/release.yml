@@ -3,12 +3,6 @@
 # iOS fica de fora de propósito, como no fly-app: sem certificado de
 # distribuição não há build headless assinável, e a instalação expiraria em
 # 7 dias. iOS sai do Mac, pelo cabo.
-#
-# ATENÇÃO — assinatura: este repo ainda não tem keystore de release.
-# android/app/build.gradle.kts assina o release com a chave de DEBUG. O APK
-# instala e roda, mas não é a mesma identidade do fly-app, e trocar para uma
-# chave de verdade depois exige desinstalar a versão anterior do aparelho
-# (o que apaga o histórico local — ele é permanente e só existe no aparelho).
 name: release
 
 on:
@@ -24,6 +18,13 @@ permissions:
 
 env:
   FLUTTER_VERSION: '3.47.3'
+  # SHA-256 do certificado de release (CN=Aerovolt, O=Medeirostec) — a mesma
+  # keystore do fly-app. O build de release cai nas chaves de DEBUG quando
+  # key.properties falta, em silêncio e com sucesso; um secret vazio ou
+  # digitado errado publicaria um APK que nenhum piloto consegue instalar por
+  # cima do que já tem. Esta impressão digital é o que transforma esse
+  # fallback silencioso em job quebrado.
+  SIGNING_CERT_SHA256: 'a06f34a6c39d6394c7e04c611c6d63874cafc89672ca0818764f37a7dd34768b'
 
 jobs:
   release:
@@ -94,6 +95,32 @@ jobs:
       - name: Testes de unidade
         run: flutter test test/audio test/history test/room test/ui
 
+      # --- assinatura ---------------------------------------------------
+      - name: Restaurar a keystore de release
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::secret $v vazio — não vou publicar um release assinado com debug."
+              exit 1
+            fi
+          done
+          KS="${RUNNER_TEMP}/aerovolt-upload.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          # android/key.properties é gitignored e lido pelo app/build.gradle.kts
+          # exatamente como na máquina do dev; nenhuma mudança no Gradle.
+          cat > android/key.properties <<EOF
+          storeFile=$KS
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       # --- build --------------------------------------------------------
       # Um APK universal, não --split-per-abi: isso vai na mão para o piloto,
       # e três arquivos são três chances de instalar o errado.
@@ -102,6 +129,19 @@ jobs:
           flutter build apk --release \
             --build-name='${{ steps.version.outputs.name }}' \
             --build-number='${{ steps.version.outputs.code }}'
+
+      - name: Conferir que o APK saiu com a chave de release
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)"
+          ACTUAL="$("$APKSIGNER" verify --print-certs \
+            build/app/outputs/flutter-apk/app-release.apk \
+            | grep -i 'SHA-256 digest' | head -1 | awk '{print $NF}')"
+          echo "certificado: $ACTUAL"
+          if [ "$ACTUAL" != "$SIGNING_CERT_SHA256" ]; then
+            echo "::error::APK NÃO está assinado com a chave de release (esperado $SIGNING_CERT_SHA256)."
+            exit 1
+          fi
 
       - name: Conferir a versão que chegou no manifest
         run: |
@@ -125,9 +165,6 @@ jobs:
           name: ${{ steps.version.outputs.name }}
           body: |
             APK Android da sala de pilotos, para instalar direto no aparelho.
-
-            Assinado com a chave de **debug** — ainda não há keystore de
-            release neste repo.
 
             Instalação por cima de uma versão anterior (preserva o histórico):
 
