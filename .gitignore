@@ -14,3 +14,8 @@ ios/.symlinks/
 ios/Flutter/Flutter.podspec
 android/.gradle/
 android/local.properties
+
+# Defines de build. O de produção carrega a REVERB_APP_KEY e nunca sobe;
+# o .example.json ao lado documenta o formato e esse sim é versionado.
+flycomm-*.json
+!flycomm-*.example.json

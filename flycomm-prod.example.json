@@ -1,0 +1,6 @@
+{
+  "FLYCOMM_HTTP": "https://flycomm.medeirostec.com.br",
+  "FLYCOMM_WS_HOST": "flycomm.medeirostec.com.br",
+  "FLYCOMM_WS_PORT": "443",
+  "FLYCOMM_WS_KEY": "peça a alguém do projeto, ou copie de REVERB_APP_KEY em ~/flycomm/.env na VPS"
+}

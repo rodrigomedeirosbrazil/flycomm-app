@@ -144,6 +144,35 @@ apontado para `https://flycomm.medeirostec.com.br`, na 443, HTTP e WebSocket
 (o mesmo valor de `REVERB_APP_KEY` em `~/flycomm/.env` na VPS); o job falha
 alto se ele estiver vazio, em vez de publicar um APK que não abre.
 
+### Compilar produção da sua máquina
+
+O CI só monta Android. iOS sai daqui, pelo cabo — e volta e meia é preciso um
+APK de produção local também. Para não digitar os quatro defines na mão (e
+errar um deles em silêncio), eles moram num arquivo:
+
+```bash
+flutter build ios --release --dart-define-from-file=flycomm-prod.json
+flutter build apk --release --dart-define-from-file=flycomm-prod.json
+```
+
+`flycomm-prod.json` **não está no repositório e não pode entrar** — ele carrega
+a `REVERB_APP_KEY`. O `.gitignore` cobre `flycomm-*.json` e abre exceção para
+`flycomm-*.example.json`; copie o exemplo e preencha a chave:
+
+```bash
+cp flycomm-prod.example.json flycomm-prod.json   # e edite FLYCOMM_WS_KEY
+```
+
+Seja honesto sobre o que isso protege. A chave vai embutida no APK e aparece na
+URL de conexão do Reverb — quem tem o arquivo instalado tem a chave, e o
+`.gitignore` não muda isso. O que ele evita é ela entrar no **histórico do
+git**, que é o único lugar de onde tirar depois é caro. O arquivo em texto na
+sua máquina é aceitável; no histórico do repositório, não.
+
+O mesmo vale para builds locais: se você cansar de repetir os defines do
+servidor de bancada, um `flycomm-local.json` com os valores da sua LAN também é
+ignorado pela mesma regra.
+
 O banco de produção não roda seed: não existem os dispositivos
 `demo-device-*` nem os convites `FLY-TEST`/`FLY-2FLY` que
 `test/integration/env.dart` usa — os testes de integração continuam
