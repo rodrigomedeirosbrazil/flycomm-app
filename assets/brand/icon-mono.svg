@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="flycomm">
+  <!-- Uma cor so, via currentColor. As mascaras abrem folgas de 10px entre as
+       camadas: sem elas o desenho vira uma mancha unica. -->
+  <mask id="folga-radio">
+    <rect width="512" height="512" fill="#fff"/>
+    <g transform="rotate(-12 256 300)" fill="#000" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 189.3 110.9 A 44 44 0 0 1 258.7 110.9" fill="none" stroke-width="40"/>
+      <path d="M 167.3 93.7 A 72 72 0 0 1 280.7 93.7" fill="none" stroke-width="40"/>
+      <rect x="214" y="138" width="20" height="86" rx="10" stroke-width="20"/>
+      <rect x="196" y="210" width="120" height="196" rx="26" stroke-width="20"/>
+    </g>
+  </mask>
+
+  <mask id="folga-nuvem">
+    <rect width="512" height="512" fill="#fff"/>
+    <g fill="#000" stroke="#000" stroke-width="20" stroke-linejoin="round">
+      <rect x="112" y="372" width="288" height="48" rx="24"/>
+      <circle cx="158" cy="374" r="46"/>
+      <circle cx="238" cy="362" r="54"/>
+      <circle cx="322" cy="372" r="48"/>
+      <circle cx="382" cy="384" r="34"/>
+    </g>
+    <g transform="rotate(-12 256 300)" fill="#000">
+      <rect x="222" y="240" width="68" height="12" rx="6"/>
+      <rect x="222" y="264" width="68" height="12" rx="6"/>
+    </g>
+  </mask>
+
+  <g fill="currentColor" mask="url(#folga-radio)">
+    <rect x="150" y="300" width="224" height="90"/>
+    <circle cx="196" cy="318" r="56"/>
+    <circle cx="276" cy="296" r="64"/>
+    <circle cx="348" cy="326" r="46"/>
+  </g>
+
+  <g transform="rotate(-12 256 300)" mask="url(#folga-nuvem)">
+    <g fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round">
+      <path d="M 189.3 110.9 A 44 44 0 0 1 258.7 110.9"/>
+      <path d="M 167.3 93.7 A 72 72 0 0 1 280.7 93.7"/>
+    </g>
+    <rect x="214" y="138" width="20" height="86" rx="10" fill="currentColor"/>
+    <rect x="196" y="210" width="120" height="196" rx="26" fill="currentColor"/>
+  </g>
+
+  <g fill="currentColor">
+    <rect x="112" y="372" width="288" height="48" rx="24"/>
+    <circle cx="158" cy="374" r="46"/>
+    <circle cx="238" cy="362" r="54"/>
+    <circle cx="322" cy="372" r="48"/>
+    <circle cx="382" cy="384" r="34"/>
+  </g>
+</svg>
