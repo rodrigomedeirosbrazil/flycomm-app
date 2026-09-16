@@ -24,6 +24,7 @@ dependencies:
   web_socket_channel: ^3.0.3
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
   build_runner: ^2.16.1
@@ -32,3 +33,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  image_path: "assets/brand/export-ios.png"
+  ios: true
+  remove_alpha_ios: true
+  android: "ic_launcher"
+  adaptive_icon_background: "assets/brand/export-android-background.png"
+  adaptive_icon_foreground: "assets/brand/export-android-foreground.png"
